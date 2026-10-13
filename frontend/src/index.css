@@ -1,0 +1,291 @@
+@import 'bootstrap/dist/css/bootstrap.min.css';
+@import 'bootstrap-icons/font/bootstrap-icons.css';
+
+/* 💧 Sprink / Hydro Light Sky-Aqua Eco Theme */
+:root {
+  --primary-color: #005F73;       /* Deep Hydro Teal - Primary buttons, logo, key headings */
+  --primary-hover: #0A9396;       /* Vibrant Aqua Teal Hover */
+  --secondary-color: #008094;     /* Medium Teal */
+  --slate-blue: #5A738E;          /* Slate Blue (Unified Palette Accent) */
+  --slate-blue-light: #EBF1F6;    /* Light Slate Blue Canvas */
+  --accent-color: #94D2BD;        /* Soft Mint Teal Accent */
+  --sky-bg: #E3F6FF;              /* Light Pastel Sky Ice-Blue */
+  --sky-light: #F0FAFF;           /* Soft Sky Canvas */
+  --card-bg: #ffffff;             /* Crisp White Cards */
+  --sidebar-bg: #F0FAFF;          /* Light Sky Sidebar */
+  --navbar-bg: #E3F6FF;           /* Light Sky Navbar */
+  --border-color: #D4EBF8;        /* Soft Pastel Cyan Border */
+  --text-dark: #003554;           /* Deep Ocean Navy Heading Text */
+  --text-muted: #486581;          /* Muted Blue-Grey Body Text */
+  --font-heading: 'Outfit', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  --font-body: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+}
+
+body {
+  font-family: var(--font-body);
+  background-color: var(--sky-light);
+  color: var(--text-muted);
+  margin: 0;
+  padding: 0;
+  overflow-x: hidden;
+}
+
+h1, h2, h3, h4, h5, h6, .brand-font {
+  font-family: var(--font-heading);
+  font-weight: 700;
+  color: var(--text-dark);
+}
+
+/* Unified Slate Blue Utility Classes */
+.bg-slate-blue {
+  background-color: #5A738E !important;
+  color: #ffffff !important;
+}
+
+.text-slate-blue {
+  color: #5A738E !important;
+}
+
+.border-slate-blue {
+  border-color: #5A738E !important;
+}
+
+.badge-slate-blue {
+  background-color: #EBF1F6 !important;
+  color: #5A738E !important;
+  border: 1px solid #C8D7E6 !important;
+}
+
+/* Light Sky Hydro Hero Section (Sprink Style) */
+.hero-section {
+  background: linear-gradient(180deg, #E3F6FF 0%, #F0FAFF 100%);
+  color: var(--text-dark);
+  padding: 5.5rem 0 4.5rem;
+  position: relative;
+  overflow: hidden;
+  border-bottom: 1px solid var(--border-color);
+}
+
+.hero-section h1 {
+  color: var(--text-dark) !important;
+}
+
+.hero-section p {
+  color: var(--text-muted) !important;
+}
+
+.hero-section::before {
+  content: '';
+  position: absolute;
+  top: -40%;
+  right: -15%;
+  width: 550px;
+  height: 550px;
+  background: radial-gradient(circle, rgba(148, 210, 189, 0.25) 0%, rgba(0,0,0,0) 70%);
+  border-radius: 50%;
+}
+
+/* Sprink Style Pill CTA Buttons */
+.btn-sprink-primary, .btn-primary-gradient, .btn-primary, .btn-dark {
+  background: var(--primary-color) !important;
+  color: #ffffff !important;
+  border: 1px solid var(--primary-color) !important;
+  font-weight: 600;
+  border-radius: 50rem !important; /* Full Pill Button */
+  padding: 0.65rem 1.6rem;
+  transition: all 0.2s ease;
+  box-shadow: 0 4px 10px rgba(0, 95, 115, 0.15);
+}
+
+.btn-sprink-primary:hover, .btn-primary-gradient:hover, .btn-primary:hover, .btn-dark:hover {
+  background: var(--primary-hover) !important;
+  border-color: var(--primary-hover) !important;
+  color: #ffffff !important;
+  box-shadow: 0 6px 14px rgba(10, 147, 150, 0.25);
+  transform: translateY(-1px);
+}
+
+.btn-sprink-secondary, .btn-outline-light, .btn-outline-dark, .btn-outline-secondary {
+  background: #ffffff !important;
+  color: var(--primary-color) !important;
+  border: 1.5px solid var(--border-color) !important;
+  font-weight: 600;
+  border-radius: 50rem !important;
+  padding: 0.65rem 1.6rem;
+  transition: all 0.2s ease;
+}
+
+.btn-sprink-secondary:hover, .btn-outline-light:hover, .btn-outline-dark:hover, .btn-outline-secondary:hover {
+  background: #E8F8FF !important;
+  border-color: var(--primary-color) !important;
+  color: var(--primary-color) !important;
+}
+
+/* Glass Cards - Soft Sky Aqua Style */
+.glass-card {
+  background: #ffffff;
+  border: 1px solid var(--border-color);
+  border-radius: 1rem;
+  box-shadow: 0 4px 15px rgba(0, 95, 115, 0.04);
+  transition: all 0.25s ease;
+}
+
+.glass-card:hover {
+  border-color: #94D2BD;
+  box-shadow: 0 8px 24px rgba(0, 95, 115, 0.08);
+  transform: translateY(-2px);
+}
+
+/* Custom Navbar (Sprink Light Sky Theme) */
+.app-navbar {
+  background: #E3F6FF !important;
+  border-bottom: 1px solid var(--border-color);
+  padding: 0.85rem 1.75rem;
+}
+
+.app-navbar .navbar-brand {
+  color: var(--primary-color) !important;
+}
+
+.app-navbar .nav-link {
+  color: var(--text-dark) !important;
+  font-weight: 600;
+  transition: color 0.15s ease;
+}
+
+.app-navbar .nav-link:hover,
+.app-navbar .nav-link.active {
+  color: var(--primary-hover) !important;
+}
+
+/* Custom Sidebar (Constant Fixed 260px Width Across All Pages) */
+.app-sidebar {
+  width: 260px !important;
+  min-width: 260px !important;
+  max-width: 260px !important;
+  flex-shrink: 0 !important;
+  flex-grow: 0 !important;
+  min-height: calc(100vh - 65px);
+  background: #F0FAFF;
+  color: var(--text-muted);
+  padding: 1.5rem 1rem;
+  border-right: 1px solid var(--border-color);
+}
+
+.sidebar-link {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.75rem 1.1rem;
+  color: var(--text-muted);
+  text-decoration: none;
+  border-radius: 0.75rem;
+  font-weight: 600;
+  font-size: 0.9rem;
+  transition: all 0.2s ease;
+  margin-bottom: 0.35rem;
+}
+
+.sidebar-link:hover {
+  background: #E3F6FF;
+  color: var(--primary-color);
+}
+
+.sidebar-link.active {
+  background: #E3F6FF;
+  color: var(--primary-color);
+  font-weight: 700;
+  border-left: 4px solid var(--primary-color);
+}
+
+.sidebar-link i {
+  font-size: 1.15rem;
+  color: var(--primary-color);
+}
+
+/* Status Badges */
+.badge-pending {
+  background-color: #FEF3C7;
+  color: #92400E;
+  border: 1px solid #FDE68A;
+}
+
+.badge-approved, .badge-active, .badge-paid {
+  background-color: #E8F8F5;
+  color: #0E6251;
+  border: 1px solid #A3E4D7;
+}
+
+.badge-rejected, .badge-unpaid, .badge-faulty {
+  background-color: #EBF1F6;
+  color: #5A738E;
+  border: 1px solid #C8D7E6;
+}
+
+.badge-custom {
+  font-size: 0.8rem;
+  font-weight: 600;
+  padding: 0.35rem 0.75rem;
+  border-radius: 2rem;
+}
+
+/* Custom Minimalist Table */
+.custom-table {
+  background: white;
+  border-radius: 1rem;
+  overflow: hidden;
+  border: 1px solid var(--border-color);
+}
+
+.custom-table th {
+  background-color: #F0FAFF;
+  color: var(--text-dark);
+  font-weight: 700;
+  text-transform: uppercase;
+  font-size: 0.75rem;
+  letter-spacing: 0.05em;
+  padding: 0.9rem 1rem;
+  border-bottom: 1px solid var(--border-color);
+}
+
+.custom-table td {
+  padding: 0.95rem 1rem;
+  vertical-align: middle;
+  border-bottom: 1px solid #E8F4FA;
+  color: var(--text-muted);
+  font-size: 0.9rem;
+}
+
+/* User Profile Dropdown Button */
+.user-profile-btn {
+  background: #ffffff !important;
+  border: 1px solid var(--border-color) !important;
+  border-radius: 50rem !important;
+  padding: 0.4rem 0.95rem;
+  color: var(--primary-color) !important;
+  transition: all 0.2s ease;
+  box-shadow: 0 2px 6px rgba(0, 95, 115, 0.08);
+}
+
+.user-profile-btn:hover,
+.user-profile-btn:focus,
+.user-profile-btn.show {
+  background: #E3F6FF !important;
+  border-color: var(--primary-color) !important;
+  color: var(--primary-color) !important;
+}
+
+/* Nav Pills Styling */
+.nav-pills .nav-link {
+  color: var(--text-muted);
+  border-radius: 50rem;
+  padding: 0.6rem 1.25rem;
+  font-size: 0.9rem;
+  font-weight: 600;
+  transition: all 0.2s ease;
+}
+
+.nav-pills .nav-link.active {
+  background-color: var(--primary-color) !important;
+  color: #ffffff !important;
+}

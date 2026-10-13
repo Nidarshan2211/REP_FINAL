@@ -1,0 +1,426 @@
+{
+  "info": {
+    "_postman_id": "smart-water-billing-collection",
+    "name": "Smart Water Billing System API",
+    "description": "Complete Postman API Collection for Super Admin, Building Owner, and Resident portals.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    {
+      "key": "baseUrl",
+      "value": "http://localhost:8080/api",
+      "type": "string"
+    },
+    {
+      "key": "adminToken",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "ownerToken",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "residentToken",
+      "value": "",
+      "type": "string"
+    }
+  ],
+  "item": [
+    {
+      "name": "1. Auth & Activation",
+      "item": [
+        {
+          "name": "Super Admin Login",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"admin@smartwater.com\",\n  \"password\": \"Admin@123456\",\n  \"selectedRole\": \"SUPER_ADMIN\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/auth/login",
+              "host": ["{{baseUrl}}"],
+              "path": ["auth", "login"]
+            }
+          }
+        },
+        {
+          "name": "Building Owner Login",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"owner.robert@gmail.com\",\n  \"password\": \"Admin@123456\",\n  \"selectedRole\": \"BUILDING_OWNER\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/auth/login",
+              "host": ["{{baseUrl}}"],
+              "path": ["auth", "login"]
+            }
+          }
+        },
+        {
+          "name": "Resident Login",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"michael.resident@gmail.com\",\n  \"password\": \"Admin@123456\",\n  \"selectedRole\": \"RESIDENT\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/auth/login",
+              "host": ["{{baseUrl}}"],
+              "path": ["auth", "login"]
+            }
+          }
+        },
+        {
+          "name": "Register Building Owner",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"David Miller\",\n  \"email\": \"david.owner@gmail.com\",\n  \"password\": \"Admin@123456\",\n  \"phone\": \"+1 555-8899\",\n  \"buildingName\": \"Ocean View Residency\",\n  \"buildingNumber\": \"OV-01\",\n  \"totalFlats\": 12,\n  \"location\": \"Coastal Road, Block A\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/auth/register-owner",
+              "host": ["{{baseUrl}}"],
+              "path": ["auth", "register-owner"]
+            }
+          }
+        },
+        {
+          "name": "Activate Resident Account",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"jim.halpert@gmail.com\",\n  \"password\": \"Admin@123456\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/auth/accept-invitation",
+              "host": ["{{baseUrl}}"],
+              "path": ["auth", "accept-invitation"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "2. Super Admin Management",
+      "item": [
+        {
+          "name": "Get Super Admin Dashboard Stats",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{adminToken}}" }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/admin/dashboard",
+              "host": ["{{baseUrl}}"],
+              "path": ["admin", "dashboard"]
+            }
+          }
+        },
+        {
+          "name": "List Pending Building Owners",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{adminToken}}" }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/admin/owners/pending",
+              "host": ["{{baseUrl}}"],
+              "path": ["admin", "owners", "pending"]
+            }
+          }
+        },
+        {
+          "name": "Approve Building Owner",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{adminToken}}" }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/admin/owners/2/approve",
+              "host": ["{{baseUrl}}"],
+              "path": ["admin", "owners", "2", "approve"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "3. Building & Resident Management",
+      "item": [
+        {
+          "name": "Invite Resident",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{ownerToken}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"buildingId\": 1,\n  \"name\": \"Alex Mercer\",\n  \"email\": \"alex.mercer@gmail.com\",\n  \"phone\": \"+1 555-7711\",\n  \"apartmentNumber\": \"Apt 5C\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/residents/invite",
+              "host": ["{{baseUrl}}"],
+              "path": ["residents", "invite"]
+            }
+          }
+        },
+        {
+          "name": "List Building Residents",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{ownerToken}}" }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/owners/residents",
+              "host": ["{{baseUrl}}"],
+              "path": ["owners", "residents"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "4. Tiered Slab Tariffs",
+      "item": [
+        {
+          "name": "Create or Update Slab Tariff",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{ownerToken}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"buildingId\": 1,\n  \"baseLimit\": 10.00,\n  \"baseRate\": 15.00,\n  \"extraRate\": 25.00,\n  \"effectiveFrom\": \"2026-08-01\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/admin/tariff",
+              "host": ["{{baseUrl}}"],
+              "path": ["admin", "tariff"]
+            }
+          }
+        },
+        {
+          "name": "Get Current Active Tariff",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{ownerToken}}" }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/admin/tariff?buildingId=1",
+              "host": ["{{baseUrl}}"],
+              "path": ["admin", "tariff"],
+              "query": [
+                { "key": "buildingId", "value": "1" }
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "5. Bulk Water Purchase Tracking",
+      "item": [
+        {
+          "name": "Record Bulk Water Purchase",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{ownerToken}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"buildingId\": 1,\n  \"supplier\": \"Water Tanker Express\",\n  \"volume\": 1000.00,\n  \"unitCost\": 50.00,\n  \"purchaseDate\": \"2026-08-05\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/admin/purchase",
+              "host": ["{{baseUrl}}"],
+              "path": ["admin", "purchase"]
+            }
+          }
+        },
+        {
+          "name": "Get Bulk Water Purchase History",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{ownerToken}}" }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/admin/purchase?buildingId=1",
+              "host": ["{{baseUrl}}"],
+              "path": ["admin", "purchase"],
+              "query": [
+                { "key": "buildingId", "value": "1" }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Delete Purchase Entry",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{ownerToken}}" }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/admin/purchase/1",
+              "host": ["{{baseUrl}}"],
+              "path": ["admin", "purchase", "1"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "6. Billing Cycles & Invoicing",
+      "item": [
+        {
+          "name": "Open New Billing Cycle",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{ownerToken}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"buildingId\": 1,\n  \"startDate\": \"2026-08-01\",\n  \"endDate\": \"2026-08-31\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/admin/billing/open",
+              "host": ["{{baseUrl}}"],
+              "path": ["admin", "billing", "open"]
+            }
+          }
+        },
+        {
+          "name": "Finalize Billing Cycle",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{ownerToken}}" }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/admin/billing/finalize/1",
+              "host": ["{{baseUrl}}"],
+              "path": ["admin", "billing", "finalize", "1"]
+            }
+          }
+        },
+        {
+          "name": "Archive Completed Cycle",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{ownerToken}}" }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/admin/billing/archive/1",
+              "host": ["{{baseUrl}}"],
+              "path": ["admin", "billing", "archive", "1"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "7. Resident Bills, Payments & Alerts",
+      "item": [
+        {
+          "name": "View Resident Bills",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{residentToken}}" }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/resident/bills",
+              "host": ["{{baseUrl}}"],
+              "path": ["resident", "bills"]
+            }
+          }
+        },
+        {
+          "name": "Pay Water Bill",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{residentToken}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"billId\": 1,\n  \"amount\": 110.00,\n  \"paymentMethod\": \"CREDIT_CARD\",\n  \"transactionReference\": \"CARD-9911-REF\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/resident/pay",
+              "host": ["{{baseUrl}}"],
+              "path": ["resident", "pay"]
+            }
+          }
+        },
+        {
+          "name": "Get Resident Notifications & Leak Alerts",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{residentToken}}" }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/notifications",
+              "host": ["{{baseUrl}}"],
+              "path": ["notifications"]
+            }
+          }
+        },
+        {
+          "name": "Mark Notification as Read",
+          "request": {
+            "method": "PUT",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{residentToken}}" }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/notifications/read/1",
+              "host": ["{{baseUrl}}"],
+              "path": ["notifications", "read", "1"]
+            }
+          }
+        }
+      ]
+    }
+  ]
+}
