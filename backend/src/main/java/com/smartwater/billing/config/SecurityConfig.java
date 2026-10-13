@@ -61,7 +61,7 @@ public class SecurityConfig {
                                 "/v3/api-docs/**"
                         ).permitAll()
                         .requestMatchers("/admin/**").hasRole("SUPER_ADMIN")
-                        .requestMatchers("/owners/**", "/residents/invite", "/api/residents/invite", "/api/residents/invitations/*/resend").hasAnyRole("SUPER_ADMIN", "BUILDING_OWNER")
+                        .requestMatchers("/owners/**", "/residents/invite", "/api/residents/invite", "/api/residents/invitations/*/resend", "/bulk-billing/**", "/api/bulk-billing/**").hasAnyRole("SUPER_ADMIN", "BUILDING_OWNER")
                         .requestMatchers("/resident/**").hasAnyRole("SUPER_ADMIN", "BUILDING_OWNER", "RESIDENT")
                         .requestMatchers("/bills/*/pdf", "/api/bills/*/pdf").hasAnyRole("SUPER_ADMIN", "BUILDING_OWNER", "RESIDENT")
                         .anyRequest().authenticated()
