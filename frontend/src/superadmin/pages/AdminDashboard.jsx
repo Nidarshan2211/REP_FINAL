@@ -42,6 +42,17 @@ export default function AdminDashboard() {
     }
   };
 
+  const handleDeleteOwner = async (ownerId, ownerName) => {
+    if (window.confirm(`Are you sure you want to remove building owner "${ownerName}" and all their associated properties from the platform? This action cannot be undone.`)) {
+      try {
+        await API.delete(`/admin/owners/${ownerId}`);
+        fetchStats();
+      } catch (err) {
+        alert(err.response?.data?.message || 'Failed to delete building owner');
+      }
+    }
+  };
+
   if (loading) return <LoadingSpinner text="Fetching Super Admin Analytics..." />;
 
   return (
@@ -116,26 +127,32 @@ export default function AdminDashboard() {
                         )}
                       </td>
                       <td>
-                        {owner.approvalStatus === 'PENDING' ? (
-                          <div className="d-flex align-items-center gap-2">
-                            <button
-                              className="btn btn-sm btn-dark px-3 py-1.5 fw-semibold rounded-2 shadow-sm"
-                              onClick={() => handleApprove(owner.ownerId)}
-                            >
-                              <i className="bi bi-check2 me-1"></i> Approve
-                            </button>
-                            <button
-                              className="btn btn-sm btn-outline-danger px-3 py-1.5 fw-semibold rounded-2"
-                              onClick={() => handleReject(owner.ownerId)}
-                            >
-                              <i className="bi bi-x-lg me-1"></i> Reject
-                            </button>
-                          </div>
-                        ) : (
-                          <span className="text-muted fs-7">
-                            <i className="bi bi-shield-check text-success me-1"></i> Active
-                          </span>
-                        )}
+                        <div className="d-flex align-items-center gap-2">
+                          {owner.approvalStatus === 'PENDING' && (
+                            <>
+                              <button
+                                className="btn btn-sm btn-dark px-2.5 py-1 fw-semibold rounded-2 shadow-sm"
+                                onClick={() => handleApprove(owner.ownerId)}
+                              >
+                                <i className="bi bi-check2 me-1"></i> Approve
+                              </button>
+                              <button
+                                className="btn btn-sm btn-outline-warning px-2.5 py-1 fw-semibold rounded-2"
+                                onClick={() => handleReject(owner.ownerId)}
+                              >
+                                <i className="bi bi-x-lg me-1"></i> Reject
+                              </button>
+                            </>
+                          )}
+                          <button
+                            className="btn btn-sm btn-outline-danger px-2.5 py-1 fw-semibold rounded-2 d-flex align-items-center gap-1"
+                            title="Delete and remove this building owner"
+                            onClick={() => handleDeleteOwner(owner.ownerId, owner.name)}
+                          >
+                            <i className="bi bi-trash"></i>
+                            <span>Delete</span>
+                          </button>
+                        </div>
                       </td>
                     </tr>
                   ))

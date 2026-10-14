@@ -26,8 +26,8 @@ export default function Sidebar() {
             <NavLink to="/admin/pending-owners" className={({ isActive }) => `sidebar-link ${isActive ? 'active' : ''}`}>
               <i className="bi bi-person-check-fill"></i> Pending Approvals
             </NavLink>
-            <NavLink to="/admin/profile" className={({ isActive }) => `sidebar-link ${isActive ? 'active' : ''}`}>
-              <i className="bi bi-person-circle"></i> My Profile
+            <NavLink to="/admin/history" className={({ isActive }) => `sidebar-link ${isActive ? 'active' : ''}`}>
+              <i className="bi bi-clock-history"></i> Owner History
             </NavLink>
           </>
         )}

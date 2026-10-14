@@ -8,11 +8,13 @@ import DashboardLayout from './shared/layouts/DashboardLayout';
 import LandingPage from './shared/auth/LandingPage';
 import LoginPage from './shared/auth/LoginPage';
 import RegisterOwnerPage from './shared/auth/RegisterOwnerPage';
+import RegisterResidentPage from './shared/auth/RegisterResidentPage';
 import AcceptInvitationPage from './shared/auth/AcceptInvitationPage';
 
 import AdminDashboard from './superadmin/pages/AdminDashboard';
 import AdminOwnersPage from './superadmin/pages/AdminOwnersPage';
 import AdminPendingOwnersPage from './superadmin/pages/AdminPendingOwnersPage';
+import AdminHistoryPage from './superadmin/pages/AdminHistoryPage';
 
 import OwnerDashboard from './owner/pages/OwnerDashboard';
 import OwnerBuildingsPage from './owner/pages/OwnerBuildingsPage';
@@ -40,6 +42,8 @@ export default function App() {
             <Route path="/" element={<LandingPage />} />
             <Route path="/login" element={<LoginPage />} />
             <Route path="/register-owner" element={<RegisterOwnerPage />} />
+            <Route path="/register-resident" element={<RegisterResidentPage />} />
+            <Route path="/register" element={<RegisterResidentPage />} />
             <Route path="/accept-invitation" element={<AcceptInvitationPage />} />
           </Route>
 
@@ -48,6 +52,7 @@ export default function App() {
             <Route path="/admin/dashboard" element={<AdminDashboard />} />
             <Route path="/admin/owners" element={<AdminOwnersPage />} />
             <Route path="/admin/pending-owners" element={<AdminPendingOwnersPage />} />
+            <Route path="/admin/history" element={<AdminHistoryPage />} />
             <Route path="/admin/profile" element={<ProfilePage />} />
           </Route>
 

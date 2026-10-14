@@ -20,7 +20,7 @@ public class Resident {
     private User user;
 
     @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "building_id", nullable = false)
+    @JoinColumn(name = "building_id", nullable = true)
     private Building building;
 
     @Column(nullable = false, length = 100)
@@ -29,10 +29,10 @@ public class Resident {
     @Column(nullable = false, length = 150)
     private String email;
 
-    @Column(nullable = false, length = 20)
+    @Column(nullable = true, length = 50)
     private String phone;
 
-    @Column(name = "apartment_number", nullable = false, length = 20)
+    @Column(name = "apartment_number", nullable = true, length = 50)
     private String apartmentNumber;
 
     @Column(name = "invitation_token")

@@ -24,6 +24,8 @@ public class ResidentDTOs {
         @NotBlank(message = "Apartment number is required")
         private String apartmentNumber;
 
+        private Long apartmentId;
+
         public InviteResidentRequest() {}
         public InviteResidentRequest(Long buildingId, String name, String email, String phone, String apartmentNumber) {
             this.buildingId = buildingId;
@@ -47,6 +49,9 @@ public class ResidentDTOs {
 
         public String getApartmentNumber() { return apartmentNumber; }
         public void setApartmentNumber(String apartmentNumber) { this.apartmentNumber = apartmentNumber; }
+
+        public Long getApartmentId() { return apartmentId; }
+        public void setApartmentId(Long apartmentId) { this.apartmentId = apartmentId; }
     }
 
     public static class UpdateResidentRequest {

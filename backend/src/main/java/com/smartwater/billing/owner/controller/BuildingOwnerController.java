@@ -27,7 +27,6 @@ public class BuildingOwnerController {
         this.residentService = residentService;
     }
 
-
     @GetMapping({"/owners/dashboard", "/api/owner/dashboard"})
     public ResponseEntity<OwnerDashboardStats> getDashboardStats(Authentication authentication) {
         return ResponseEntity.ok(ownerService.getOwnerDashboardStats(authentication.getName()));
@@ -44,6 +43,15 @@ public class BuildingOwnerController {
             @Valid @RequestBody CreateBuildingRequest request
     ) {
         return ResponseEntity.ok(ownerService.createBuilding(authentication.getName(), request));
+    }
+
+    @DeleteMapping({"/owners/buildings/{id}", "/api/owner/buildings/{id}"})
+    public ResponseEntity<Void> deleteBuilding(
+            Authentication authentication,
+            @PathVariable("id") Long buildingId
+    ) {
+        ownerService.deleteBuilding(authentication.getName(), buildingId);
+        return ResponseEntity.noContent().build();
     }
 
     @GetMapping({"/owners/residents", "/residents/owner", "/api/owner/residents", "/api/residents/owner"})
@@ -78,6 +86,15 @@ public class BuildingOwnerController {
             @Valid @RequestBody UpdateResidentRequest request
     ) {
         return ResponseEntity.ok(residentService.updateResident(authentication.getName(), residentId, request));
+    }
+
+    @PostMapping({"/owners/residents/{id}/vacate", "/api/owner/residents/{id}/vacate"})
+    public ResponseEntity<Void> vacateResident(
+            Authentication authentication,
+            @PathVariable("id") Long residentId
+    ) {
+        residentService.vacateResident(authentication.getName(), residentId);
+        return ResponseEntity.ok().build();
     }
 
     @DeleteMapping({"/owners/residents/{id}", "/api/owner/residents/{id}"})

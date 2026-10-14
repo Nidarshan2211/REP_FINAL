@@ -2,6 +2,7 @@ package com.smartwater.billing.superadmin.controller;
 
 import com.smartwater.billing.common.dto.DashboardDTOs.AdminDashboardStats;
 import com.smartwater.billing.common.dto.DashboardDTOs.BuildingOwnerDTO;
+import com.smartwater.billing.common.dto.DashboardDTOs.SystemHistoryItemDTO;
 import com.smartwater.billing.superadmin.service.SuperAdminService;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
@@ -19,7 +20,6 @@ public class SuperAdminController {
     public SuperAdminController(SuperAdminService adminService) {
         this.adminService = adminService;
     }
-
 
     @GetMapping("/dashboard")
     public ResponseEntity<AdminDashboardStats> getDashboardStats() {
@@ -44,5 +44,16 @@ public class SuperAdminController {
     @PutMapping("/owners/{id}/reject")
     public ResponseEntity<BuildingOwnerDTO> rejectOwner(@PathVariable("id") Long ownerId) {
         return ResponseEntity.ok(adminService.rejectOwner(ownerId));
+    }
+
+    @DeleteMapping("/owners/{id}")
+    public ResponseEntity<Void> deleteOwner(@PathVariable("id") Long ownerId) {
+        adminService.deleteOwner(ownerId);
+        return ResponseEntity.noContent().build();
+    }
+
+    @GetMapping("/history")
+    public ResponseEntity<List<SystemHistoryItemDTO>> getSystemHistory() {
+        return ResponseEntity.ok(adminService.getSystemHistory());
     }
 }

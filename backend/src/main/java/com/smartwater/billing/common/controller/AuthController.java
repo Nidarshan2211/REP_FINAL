@@ -1,6 +1,7 @@
 package com.smartwater.billing.common.controller;
 
 import com.smartwater.billing.common.dto.AuthDTOs.*;
+import com.smartwater.billing.resident.dto.OccupancyDTOs.RegisterResidentRequest;
 import com.smartwater.billing.common.service.AuthService;
 import com.smartwater.billing.resident.service.ResidentService;
 import jakarta.validation.Valid;
@@ -19,7 +20,6 @@ public class AuthController {
         this.residentService = residentService;
     }
 
-
     @PostMapping("/auth/login")
     public ResponseEntity<LoginResponse> login(@Valid @RequestBody LoginRequest request) {
         return ResponseEntity.ok(authService.login(request));
@@ -28,6 +28,11 @@ public class AuthController {
     @PostMapping("/auth/register-owner")
     public ResponseEntity<MessageResponse> registerOwner(@Valid @RequestBody RegisterOwnerRequest request) {
         return ResponseEntity.ok(authService.registerOwner(request));
+    }
+
+    @PostMapping({"/auth/register-resident", "/auth/register"})
+    public ResponseEntity<LoginResponse> registerResident(@Valid @RequestBody RegisterResidentRequest request) {
+        return ResponseEntity.ok(authService.registerResident(request));
     }
 
     @GetMapping({"/auth/validate-invitation", "/api/residents/invitations/validate"})

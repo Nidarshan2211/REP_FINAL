@@ -1,9 +1,5 @@
 package com.smartwater.billing.resident.repository;
 
-
-import com.smartwater.billing.common.entity.*;
-import com.smartwater.billing.owner.entity.*;
-import com.smartwater.billing.resident.entity.*;
 import com.smartwater.billing.resident.entity.ResidentInvitation;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.stereotype.Repository;
@@ -17,4 +13,5 @@ public interface ResidentInvitationRepository extends JpaRepository<ResidentInvi
     Optional<ResidentInvitation> findTopByResidentEmailAndBuildingBuildingIdAndStatusOrderByCreatedAtDesc(String email, Long buildingId, ResidentInvitation.InvitationStatus status);
     List<ResidentInvitation> findByResidentEmailOrderByCreatedAtDesc(String email);
     List<ResidentInvitation> findByBuildingBuildingIdOrderByCreatedAtDesc(Long buildingId);
+    List<ResidentInvitation> findByBuildingBuildingIdAndStatus(Long buildingId, ResidentInvitation.InvitationStatus status);
 }

@@ -1,6 +1,6 @@
 package com.smartwater.billing.resident.entity;
 
-
+import com.smartwater.billing.owner.entity.Apartment;
 import com.smartwater.billing.owner.entity.Building;
 import com.smartwater.billing.owner.entity.BuildingOwner;
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
@@ -25,6 +25,11 @@ public class ResidentInvitation {
     @JoinColumn(name = "building_id", nullable = false)
     @JsonIgnoreProperties({"hibernateLazyInitializer", "handler", "owner"})
     private Building building;
+
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "apartment_id")
+    @JsonIgnoreProperties({"hibernateLazyInitializer", "handler"})
+    private Apartment apartment;
 
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "invited_by_id")
@@ -61,10 +66,11 @@ public class ResidentInvitation {
 
     public ResidentInvitation() {}
 
-    public ResidentInvitation(Long id, Resident resident, Building building, BuildingOwner invitedBy, String residentName, String residentEmail, String phoneNumber, String apartmentNumber, String tokenHash, LocalDateTime expiresAt, InvitationStatus status, LocalDateTime createdAt, LocalDateTime acceptedAt) {
+    public ResidentInvitation(Long id, Resident resident, Building building, Apartment apartment, BuildingOwner invitedBy, String residentName, String residentEmail, String phoneNumber, String apartmentNumber, String tokenHash, LocalDateTime expiresAt, InvitationStatus status, LocalDateTime createdAt, LocalDateTime acceptedAt) {
         this.id = id;
         this.resident = resident;
         this.building = building;
+        this.apartment = apartment;
         this.invitedBy = invitedBy;
         this.residentName = residentName;
         this.residentEmail = residentEmail;
@@ -75,6 +81,10 @@ public class ResidentInvitation {
         this.status = status;
         this.createdAt = createdAt;
         this.acceptedAt = acceptedAt;
+    }
+
+    public ResidentInvitation(Long id, Resident resident, Building building, BuildingOwner invitedBy, String residentName, String residentEmail, String phoneNumber, String apartmentNumber, String tokenHash, LocalDateTime expiresAt, InvitationStatus status, LocalDateTime createdAt, LocalDateTime acceptedAt) {
+        this(id, resident, building, null, invitedBy, residentName, residentEmail, phoneNumber, apartmentNumber, tokenHash, expiresAt, status, createdAt, acceptedAt);
     }
 
     @PrePersist
@@ -92,6 +102,9 @@ public class ResidentInvitation {
 
     public Building getBuilding() { return building; }
     public void setBuilding(Building building) { this.building = building; }
+
+    public Apartment getApartment() { return apartment; }
+    public void setApartment(Apartment apartment) { this.apartment = apartment; }
 
     public BuildingOwner getInvitedBy() { return invitedBy; }
     public void setInvitedBy(BuildingOwner invitedBy) { this.invitedBy = invitedBy; }
@@ -129,6 +142,7 @@ public class ResidentInvitation {
         private Long id;
         private Resident resident;
         private Building building;
+        private Apartment apartment;
         private BuildingOwner invitedBy;
         private String residentName;
         private String residentEmail;
@@ -143,6 +157,7 @@ public class ResidentInvitation {
         public Builder id(Long id) { this.id = id; return this; }
         public Builder resident(Resident resident) { this.resident = resident; return this; }
         public Builder building(Building building) { this.building = building; return this; }
+        public Builder apartment(Apartment apartment) { this.apartment = apartment; return this; }
         public Builder invitedBy(BuildingOwner invitedBy) { this.invitedBy = invitedBy; return this; }
         public Builder residentName(String residentName) { this.residentName = residentName; return this; }
         public Builder residentEmail(String residentEmail) { this.residentEmail = residentEmail; return this; }
@@ -155,7 +170,7 @@ public class ResidentInvitation {
         public Builder acceptedAt(LocalDateTime acceptedAt) { this.acceptedAt = acceptedAt; return this; }
 
         public ResidentInvitation build() {
-            return new ResidentInvitation(id, resident, building, invitedBy, residentName, residentEmail, phoneNumber, apartmentNumber, tokenHash, expiresAt, status, createdAt, acceptedAt);
+            return new ResidentInvitation(id, resident, building, apartment, invitedBy, residentName, residentEmail, phoneNumber, apartmentNumber, tokenHash, expiresAt, status, createdAt, acceptedAt);
         }
     }
 

@@ -7,12 +7,27 @@ export default function AdminOwnersPage() {
   const [searchTerm, setSearchTerm] = useState('');
   const [loading, setLoading] = useState(true);
 
-  useEffect(() => {
+  const fetchOwners = () => {
     API.get('/admin/owners')
       .then(res => setOwners(res.data))
       .catch(err => console.error(err))
       .finally(() => setLoading(false));
+  };
+
+  useEffect(() => {
+    fetchOwners();
   }, []);
+
+  const handleDeleteOwner = async (ownerId, ownerName) => {
+    if (window.confirm(`Are you sure you want to remove building owner "${ownerName}" and all their associated properties from the platform? This action cannot be undone.`)) {
+      try {
+        await API.delete(`/admin/owners/${ownerId}`);
+        setOwners(prev => prev.filter(o => o.ownerId !== ownerId));
+      } catch (err) {
+        alert(err.response?.data?.message || 'Failed to delete building owner');
+      }
+    }
+  };
 
   const filteredOwners = owners.filter(o => 
     o.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -55,6 +70,7 @@ export default function AdminOwnersPage() {
                   <th>Managed Buildings</th>
                   <th>Status</th>
                   <th>Registered On</th>
+                  <th>Actions</th>
                 </tr>
               </thead>
               <tbody>
@@ -88,11 +104,21 @@ export default function AdminOwnersPage() {
                         )}
                       </td>
                       <td className="text-muted small">{o.createdAt ? o.createdAt.substring(0, 10) : 'N/A'}</td>
+                      <td>
+                        <button
+                          className="btn btn-sm btn-outline-danger px-2.5 py-1 fw-semibold rounded-2 d-flex align-items-center gap-1"
+                          title="Delete and remove this building owner"
+                          onClick={() => handleDeleteOwner(o.ownerId, o.name)}
+                        >
+                          <i className="bi bi-trash"></i>
+                          <span>Delete</span>
+                        </button>
+                      </td>
                     </tr>
                   ))
                 ) : (
                   <tr>
-                    <td colSpan="7" className="text-center py-4 text-muted">No owners matched your search query.</td>
+                    <td colSpan="8" className="text-center py-4 text-muted">No owners matched your search query.</td>
                   </tr>
                 )}
               </tbody>

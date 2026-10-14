@@ -56,6 +56,10 @@ public class SecurityConfig {
                 .authorizeHttpRequests(auth -> auth
                         .requestMatchers(
                                 "/auth/**",
+                                "/apartments/available",
+                                "/api/apartments/available",
+                                "/apartments/owners/**",
+                                "/api/apartments/owners/**",
                                 "/api/residents/invitations/validate",
                                 "/api/residents/invitations/accept",
                                 "/h2-console/**",
@@ -65,8 +69,17 @@ public class SecurityConfig {
                                 "/v3/api-docs/**"
                         ).permitAll()
                         .requestMatchers("/admin/**").hasRole("SUPER_ADMIN")
-                        .requestMatchers("/owners/**", "/residents/invite", "/api/residents/invite", "/api/residents/invitations/*/resend", "/bulk-billing/**", "/api/bulk-billing/**").hasAnyRole("SUPER_ADMIN", "BUILDING_OWNER")
-                        .requestMatchers("/resident/**").hasAnyRole("SUPER_ADMIN", "BUILDING_OWNER", "RESIDENT")
+                        .requestMatchers(
+                                "/owners/**",
+                                "/owner/**",
+                                "/api/owner/**",
+                                "/residents/invite",
+                                "/api/residents/invite",
+                                "/api/residents/invitations/*/resend",
+                                "/bulk-billing/**",
+                                "/api/bulk-billing/**"
+                        ).hasAnyRole("SUPER_ADMIN", "BUILDING_OWNER")
+                        .requestMatchers("/resident/**", "/api/resident/**").hasAnyRole("SUPER_ADMIN", "BUILDING_OWNER", "RESIDENT")
                         .requestMatchers("/bills/*/pdf", "/api/bills/*/pdf").hasAnyRole("SUPER_ADMIN", "BUILDING_OWNER", "RESIDENT")
                         .anyRequest().authenticated()
                 );

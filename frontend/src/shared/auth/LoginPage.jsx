@@ -18,12 +18,9 @@ export default function LoginPage() {
     if (role === 'SUPER_ADMIN') {
       setEmail('admin@smartwater.com');
       setPassword('Admin@123456');
-    } else if (role === 'BUILDING_OWNER') {
-      setEmail('owner.robert@gmail.com');
-      setPassword('Admin@123456');
-    } else if (role === 'RESIDENT') {
-      setEmail('michael.resident@gmail.com');
-      setPassword('Admin@123456');
+    } else {
+      setEmail('');
+      setPassword('');
     }
   };
 
@@ -219,11 +216,10 @@ export default function LoginPage() {
             )}
 
             {activeRole === 'RESIDENT' && (
-              <div className="p-3 border rounded-3 text-start" style={{ backgroundColor: '#F0FAFF', borderColor: '#D4EBF8' }}>
-                <span className="d-block fw-bold fs-7 mb-1" style={{ color: '#003554' }}>Received a Resident Invitation?</span>
-                <small className="text-muted d-block mb-2">If your Building Owner sent you an email invitation, activate your account here:</small>
-                <Link to="/accept-invitation" className="btn btn-sm btn-sprink-primary fw-bold px-3">
-                  <i className="bi bi-key-fill me-1"></i> Accept Invitation & Set Password
+              <div>
+                <span className="text-muted fs-7">New Resident? </span>
+                <Link to="/register-resident" className="text-decoration-none fw-bold fs-7" style={{ color: '#005F73' }}>
+                  Create Resident Account <i className="bi bi-person-plus ms-1"></i>
                 </Link>
               </div>
             )}

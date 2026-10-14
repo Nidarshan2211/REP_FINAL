@@ -135,9 +135,13 @@ public class DashboardDTOs {
         private String currentBillingCycle;
         private String cycleStartDate;
         private String cycleEndDate;
+        private Boolean hasActiveApartment;
 
         public ResidentDashboardStats() {}
         public ResidentDashboardStats(String residentName, String buildingName, String apartmentNumber, String meterNumber, Double currentMonthUsage, Double activeBillAmount, String activeBillStatus, String activeBillDueDate, long unreadNotificationsCount, String currentBillingCycle, String cycleStartDate, String cycleEndDate) {
+            this(residentName, buildingName, apartmentNumber, meterNumber, currentMonthUsage, activeBillAmount, activeBillStatus, activeBillDueDate, unreadNotificationsCount, currentBillingCycle, cycleStartDate, cycleEndDate, true);
+        }
+        public ResidentDashboardStats(String residentName, String buildingName, String apartmentNumber, String meterNumber, Double currentMonthUsage, Double activeBillAmount, String activeBillStatus, String activeBillDueDate, long unreadNotificationsCount, String currentBillingCycle, String cycleStartDate, String cycleEndDate, Boolean hasActiveApartment) {
             this.residentName = residentName;
             this.buildingName = buildingName;
             this.apartmentNumber = apartmentNumber;
@@ -150,6 +154,7 @@ public class DashboardDTOs {
             this.currentBillingCycle = currentBillingCycle;
             this.cycleStartDate = cycleStartDate;
             this.cycleEndDate = cycleEndDate;
+            this.hasActiveApartment = hasActiveApartment;
         }
 
         public String getResidentName() { return residentName; }
@@ -188,6 +193,9 @@ public class DashboardDTOs {
         public String getCycleEndDate() { return cycleEndDate; }
         public void setCycleEndDate(String cycleEndDate) { this.cycleEndDate = cycleEndDate; }
 
+        public Boolean getHasActiveApartment() { return hasActiveApartment; }
+        public void setHasActiveApartment(Boolean hasActiveApartment) { this.hasActiveApartment = hasActiveApartment; }
+
         public static Builder builder() { return new Builder(); }
 
         public static class Builder {
@@ -203,6 +211,7 @@ public class DashboardDTOs {
             private String currentBillingCycle;
             private String cycleStartDate;
             private String cycleEndDate;
+            private Boolean hasActiveApartment = true;
 
             public Builder residentName(String residentName) { this.residentName = residentName; return this; }
             public Builder buildingName(String buildingName) { this.buildingName = buildingName; return this; }
@@ -216,9 +225,10 @@ public class DashboardDTOs {
             public Builder currentBillingCycle(String currentBillingCycle) { this.currentBillingCycle = currentBillingCycle; return this; }
             public Builder cycleStartDate(String cycleStartDate) { this.cycleStartDate = cycleStartDate; return this; }
             public Builder cycleEndDate(String cycleEndDate) { this.cycleEndDate = cycleEndDate; return this; }
+            public Builder hasActiveApartment(Boolean hasActiveApartment) { this.hasActiveApartment = hasActiveApartment; return this; }
 
             public ResidentDashboardStats build() {
-                return new ResidentDashboardStats(residentName, buildingName, apartmentNumber, meterNumber, currentMonthUsage, activeBillAmount, activeBillStatus, activeBillDueDate, unreadNotificationsCount, currentBillingCycle, cycleStartDate, cycleEndDate);
+                return new ResidentDashboardStats(residentName, buildingName, apartmentNumber, meterNumber, currentMonthUsage, activeBillAmount, activeBillStatus, activeBillDueDate, unreadNotificationsCount, currentBillingCycle, cycleStartDate, cycleEndDate, hasActiveApartment);
             }
         }
     }
@@ -464,5 +474,47 @@ public class DashboardDTOs {
                 return new BuildingOwnerDTO(ownerId, userId, name, email, phone, approvalStatus, totalBuildings, createdAt);
             }
         }
+    }
+
+    public static class SystemHistoryItemDTO {
+        private String id;
+        private String category;
+        private String title;
+        private String description;
+        private String timestamp;
+        private String status;
+        private String actor;
+
+        public SystemHistoryItemDTO() {}
+        public SystemHistoryItemDTO(String id, String category, String title, String description, String timestamp, String status, String actor) {
+            this.id = id;
+            this.category = category;
+            this.title = title;
+            this.description = description;
+            this.timestamp = timestamp;
+            this.status = status;
+            this.actor = actor;
+        }
+
+        public String getId() { return id; }
+        public void setId(String id) { this.id = id; }
+
+        public String getCategory() { return category; }
+        public void setCategory(String category) { this.category = category; }
+
+        public String getTitle() { return title; }
+        public void setTitle(String title) { this.title = title; }
+
+        public String getDescription() { return description; }
+        public void setDescription(String description) { this.description = description; }
+
+        public String getTimestamp() { return timestamp; }
+        public void setTimestamp(String timestamp) { this.timestamp = timestamp; }
+
+        public String getStatus() { return status; }
+        public void setStatus(String status) { this.status = status; }
+
+        public String getActor() { return actor; }
+        public void setActor(String actor) { this.actor = actor; }
     }
 }

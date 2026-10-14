@@ -32,6 +32,18 @@ export const AuthProvider = ({ children }) => {
     return res.data;
   };
 
+  const registerResident = async (data) => {
+    const res = await API.post('/auth/register-resident', data);
+    const { token, userId, name, email: userEmail, role, status } = res.data;
+    const userData = { userId, name, email: userEmail, role, status };
+    if (token) {
+      localStorage.setItem('jwtToken', token);
+      localStorage.setItem('user', JSON.stringify(userData));
+      setUser(userData);
+    }
+    return res.data;
+  };
+
   const acceptInvitation = async (payload) => {
     const body = typeof payload === 'object' ? payload : { token: payload };
     const res = await API.post('/auth/accept-invitation', body);
@@ -45,7 +57,7 @@ export const AuthProvider = ({ children }) => {
   };
 
   return (
-    <AuthContext.Provider value={{ user, loading, login, registerOwner, acceptInvitation, logout }}>
+    <AuthContext.Provider value={{ user, loading, login, registerOwner, registerResident, acceptInvitation, logout }}>
       {children}
     </AuthContext.Provider>
   );

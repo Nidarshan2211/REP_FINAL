@@ -39,8 +39,25 @@ public class ResidentService {
     private final UserRepository userRepository;
     private final BuildingOwnerService ownerService;
     private final EmailService emailService;
+    private final ApartmentRepository apartmentRepository;
+    private final ApartmentOccupancyRepository occupancyRepository;
+    private final OccupancyRequestRepository occupancyRequestRepository;
 
-    public ResidentService(ResidentRepository residentRepository, ResidentInvitationRepository invitationRepository, BuildingRepository buildingRepository, WaterMeterRepository meterRepository, BillRepository billRepository, WaterUsageRepository usageRepository, NotificationRepository notificationRepository, UserRepository userRepository, BuildingOwnerService ownerService, EmailService emailService) {
+    public ResidentService(
+            ResidentRepository residentRepository,
+            ResidentInvitationRepository invitationRepository,
+            BuildingRepository buildingRepository,
+            WaterMeterRepository meterRepository,
+            BillRepository billRepository,
+            WaterUsageRepository usageRepository,
+            NotificationRepository notificationRepository,
+            UserRepository userRepository,
+            BuildingOwnerService ownerService,
+            EmailService emailService,
+            ApartmentRepository apartmentRepository,
+            ApartmentOccupancyRepository occupancyRepository,
+            OccupancyRequestRepository occupancyRequestRepository
+    ) {
         this.residentRepository = residentRepository;
         this.invitationRepository = invitationRepository;
         this.buildingRepository = buildingRepository;
@@ -51,72 +68,17 @@ public class ResidentService {
         this.userRepository = userRepository;
         this.ownerService = ownerService;
         this.emailService = emailService;
+        this.apartmentRepository = apartmentRepository;
+        this.occupancyRepository = occupancyRepository;
+        this.occupancyRequestRepository = occupancyRequestRepository;
     }
-
 
     @Value("${resident.invitation.expiration-hours:24}")
     private int expirationHours;
 
     @Transactional
     public void ensureDefaultResidentsForOwner(BuildingOwner owner) {
-        if (owner == null) return;
-        List<Resident> existing = residentRepository.findByBuildingOwnerOwnerId(owner.getOwnerId());
-        if (!existing.isEmpty()) {
-            return;
-        }
-
-        List<Building> buildings = buildingRepository.findByOwnerOwnerId(owner.getOwnerId());
-        if (buildings.isEmpty()) {
-            return;
-        }
-
-        Building primaryBuilding = buildings.get(0);
-        String bNum = primaryBuilding.getBuildingNumber() != null ? primaryBuilding.getBuildingNumber() : "B1";
-        String cleanBCode = bNum.toLowerCase().replaceAll("[^a-z0-9]", "");
-
-        // Resident 1 - Active
-        Resident r1 = Resident.builder()
-                .building(primaryBuilding)
-                .name("Alex Morgan")
-                .email("alex." + cleanBCode + "101@gmail.com")
-                .phone("+1 555-0101")
-                .apartmentNumber("101")
-                .invitationToken("TOKEN-101-" + primaryBuilding.getBuildingId())
-                .invitationStatus(Resident.InvitationStatus.ACCEPTED)
-                .accountStatus(Resident.AccountStatus.ACTIVE)
-                .build();
-        r1 = residentRepository.save(r1);
-
-        WaterMeter m1 = WaterMeter.builder()
-                .building(primaryBuilding)
-                .resident(r1)
-                .meterNumber("WM-" + bNum + "-101")
-                .installationDate(LocalDate.now())
-                .status(WaterMeter.MeterStatus.ACTIVE)
-                .build();
-        meterRepository.save(m1);
-
-        // Resident 2 - Pending Invite
-        Resident r2 = Resident.builder()
-                .building(primaryBuilding)
-                .name("David Miller")
-                .email("david." + cleanBCode + "102@gmail.com")
-                .phone("+1 555-0102")
-                .apartmentNumber("102")
-                .invitationToken("TOKEN-102-" + primaryBuilding.getBuildingId())
-                .invitationStatus(Resident.InvitationStatus.PENDING)
-                .accountStatus(Resident.AccountStatus.INACTIVE)
-                .build();
-        r2 = residentRepository.save(r2);
-
-        WaterMeter m2 = WaterMeter.builder()
-                .building(primaryBuilding)
-                .resident(r2)
-                .meterNumber("WM-" + bNum + "-102")
-                .installationDate(LocalDate.now())
-                .status(WaterMeter.MeterStatus.ACTIVE)
-                .build();
-        meterRepository.save(m2);
+        // No-op: resident records are created exclusively through user self-registration
     }
 
     @Transactional
@@ -135,6 +97,43 @@ public class ResidentService {
             throw new BadRequestException("An active account already exists for " + request.getEmail() + ". Invitation rejected.");
         }
 
+        // Resolve or create Apartment
+        String room = request.getApartmentNumber() != null ? request.getApartmentNumber().trim() : "";
+        Apartment apt = null;
+        if (request.getApartmentId() != null) {
+            apt = apartmentRepository.findById(request.getApartmentId()).orElse(null);
+            if (apt != null) {
+                room = apt.getRoomNumber();
+            }
+        }
+        if (apt == null && !room.isEmpty()) {
+            apt = apartmentRepository.findByBuildingBuildingIdAndRoomNumber(building.getBuildingId(), room).orElse(null);
+            if (apt == null) {
+                int floor = 1;
+                try {
+                    if (room.length() >= 3) {
+                        floor = Integer.parseInt(room.substring(0, 1));
+                    }
+                } catch (Exception ignored) {}
+                apt = Apartment.builder()
+                        .building(building)
+                        .floorNumber(floor)
+                        .apartmentName("Flat " + room)
+                        .roomNumber(room)
+                        .unitType("2BHK")
+                        .build();
+                apt = apartmentRepository.save(apt);
+            }
+        }
+
+        // Validate that apartment is NOT already occupied
+        if (apt != null) {
+            Optional<ApartmentOccupancy> activeOcc = occupancyRepository.findFirstByApartmentApartmentIdAndStatus(apt.getApartmentId(), ApartmentOccupancy.OccupancyStatus.ACTIVE);
+            if (activeOcc.isPresent()) {
+                throw new BadRequestException("Apartment " + apt.getApartmentName() + " is already occupied by " + activeOcc.get().getResident().getName() + ". You cannot invite another resident to an occupied apartment.");
+            }
+        }
+
         // Check if resident profile exists
         Resident resident = residentRepository.findByEmailIgnoreCase(request.getEmail().trim())
                 .orElse(null);
@@ -149,7 +148,7 @@ public class ResidentService {
                     .name(request.getName().trim())
                     .email(request.getEmail().trim().toLowerCase())
                     .phone(request.getPhone() != null ? request.getPhone().trim() : "")
-                    .apartmentNumber(request.getApartmentNumber().trim())
+                    .apartmentNumber(room)
                     .invitationToken(rawToken)
                     .tokenHash(tokenHash)
                     .expiresAt(expiresAt)
@@ -162,7 +161,7 @@ public class ResidentService {
             if (request.getPhone() != null && !request.getPhone().trim().isEmpty()) {
                 resident.setPhone(request.getPhone().trim());
             }
-            resident.setApartmentNumber(request.getApartmentNumber().trim());
+            resident.setApartmentNumber(room);
             resident.setInvitationToken(rawToken);
             resident.setTokenHash(tokenHash);
             resident.setExpiresAt(expiresAt);
@@ -172,7 +171,7 @@ public class ResidentService {
 
         resident = residentRepository.save(resident);
 
-        // Cancel previous invitations for this resident
+        // Cancel previous pending invitations for this resident
         List<ResidentInvitation> prevList = invitationRepository.findByResidentEmailOrderByCreatedAtDesc(resident.getEmail());
         for (ResidentInvitation prev : prevList) {
             if (prev.getStatus() == ResidentInvitation.InvitationStatus.PENDING) {
@@ -184,11 +183,12 @@ public class ResidentService {
         ResidentInvitation invitation = ResidentInvitation.builder()
                 .resident(resident)
                 .building(building)
+                .apartment(apt)
                 .invitedBy(owner)
                 .residentName(resident.getName())
                 .residentEmail(resident.getEmail())
                 .phoneNumber(resident.getPhone())
-                .apartmentNumber(resident.getApartmentNumber())
+                .apartmentNumber(room)
                 .tokenHash(tokenHash)
                 .expiresAt(expiresAt)
                 .status(ResidentInvitation.InvitationStatus.PENDING)
@@ -198,11 +198,12 @@ public class ResidentService {
         // Assign or reuse Water Meter
         WaterMeter meter = meterRepository.findFirstByResidentResidentId(resident.getResidentId()).orElse(null);
         if (meter == null) {
-            String mNum = "WM-" + building.getBuildingNumber() + "-" + resident.getApartmentNumber();
+            String mNum = "WM-" + building.getBuildingNumber() + "-" + room;
             meter = meterRepository.findByMeterNumber(mNum).orElse(null);
             if (meter == null) {
                 meter = WaterMeter.builder()
                         .building(building)
+                        .apartment(apt)
                         .resident(resident)
                         .meterNumber(mNum)
                         .installationDate(LocalDate.now())
@@ -210,15 +211,19 @@ public class ResidentService {
                         .build();
             } else {
                 meter.setBuilding(building);
+                meter.setApartment(apt);
                 meter.setResident(resident);
                 meter.setStatus(WaterMeter.MeterStatus.ACTIVE);
             }
+            meterRepository.save(meter);
+        } else if (apt != null && meter.getApartment() == null) {
+            meter.setApartment(apt);
             meterRepository.save(meter);
         }
 
         // Send Email Notification
         String ownerName = owner.getUser() != null ? owner.getUser().getName() : owner.getName();
-        boolean emailSent = emailService.sendResidentInvitation(resident.getEmail(), resident.getName(), ownerName, building.getBuildingName(), resident.getApartmentNumber(), rawToken);
+        boolean emailSent = emailService.sendResidentInvitation(resident.getEmail(), resident.getName(), ownerName, building.getBuildingName(), room, rawToken);
 
         ResidentResponse response = convertToResidentResponse(resident);
         response.setEmailSent(emailSent);
@@ -378,21 +383,142 @@ public class ResidentService {
             throw new BadRequestException("Unauthorized access to resident!");
         }
 
-        residentRepository.delete(resident);
+        // End active occupancy if any
+        Optional<ApartmentOccupancy> activeOcc = occupancyRepository.findFirstByResidentResidentIdAndStatus(residentId, ApartmentOccupancy.OccupancyStatus.ACTIVE);
+        if (activeOcc.isPresent()) {
+            ApartmentOccupancy occ = activeOcc.get();
+            occ.setStatus(ApartmentOccupancy.OccupancyStatus.ENDED);
+            occ.setEndDate(LocalDateTime.now());
+            occ.setMoveOutReason("Resident removed by building owner");
+            occupancyRepository.save(occ);
+        }
+
+        // Detach water meter
+        WaterMeter meter = meterRepository.findByResidentResidentId(residentId).orElse(null);
+        if (meter != null) {
+            meter.setResident(null);
+            meterRepository.save(meter);
+        }
+
+        // Clean up requests submitted by this resident
+        List<OccupancyRequest> reqs = occupancyRequestRepository.findAllByResidentId(residentId);
+        if (!reqs.isEmpty()) {
+            occupancyRequestRepository.deleteAll(reqs);
+        }
+
+        // Check if resident has billing history
+        boolean hasBills = !billRepository.findByResidentResidentIdOrderByGeneratedAtDesc(residentId).isEmpty();
+        if (hasBills) {
+            resident.setAccountStatus(Resident.AccountStatus.INACTIVE);
+            resident.setApartmentNumber("Vacated");
+            residentRepository.save(resident);
+        } else {
+            List<ApartmentOccupancy> allOccs = occupancyRepository.findByResidentResidentIdOrderByStartDateDesc(residentId);
+            if (!allOccs.isEmpty()) {
+                occupancyRepository.deleteAll(allOccs);
+            }
+            residentRepository.delete(resident);
+        }
+    }
+
+    @Transactional
+    public void vacateResident(String ownerEmail, Long residentId) {
+        BuildingOwner owner = ownerService.getOwnerByUserEmail(ownerEmail);
+        Resident resident = residentRepository.findById(residentId)
+                .orElseThrow(() -> new ResourceNotFoundException("Resident not found with id: " + residentId));
+
+        if (!resident.getBuilding().getOwner().getOwnerId().equals(owner.getOwnerId())) {
+            throw new BadRequestException("Unauthorized access to resident!");
+        }
+
+        // End active occupancy
+        Optional<ApartmentOccupancy> activeOcc = occupancyRepository.findFirstByResidentResidentIdAndStatus(residentId, ApartmentOccupancy.OccupancyStatus.ACTIVE);
+        if (activeOcc.isPresent()) {
+            ApartmentOccupancy occ = activeOcc.get();
+            occ.setStatus(ApartmentOccupancy.OccupancyStatus.ENDED);
+            occ.setEndDate(LocalDateTime.now());
+            occ.setMoveOutReason("Vacated by building owner");
+            occupancyRepository.save(occ);
+        }
+
+        // Detach water meter
+        WaterMeter meter = meterRepository.findByResidentResidentId(residentId).orElse(null);
+        if (meter != null) {
+            meter.setResident(null);
+            meterRepository.save(meter);
+        }
+
+        resident.setApartmentNumber("Vacated");
+        resident.setAccountStatus(Resident.AccountStatus.INACTIVE);
+        residentRepository.save(resident);
     }
 
     public ResidentDashboardStats getResidentDashboardStats(String residentEmail) {
         Resident resident = residentRepository.findByUserEmail(residentEmail)
                 .or(() -> residentRepository.findByEmail(residentEmail))
-                .orElseThrow(() -> new ResourceNotFoundException("Resident profile not found for " + residentEmail));
+                .orElse(null);
 
-        WaterMeter meter = meterRepository.findByResidentResidentId(resident.getResidentId()).orElse(null);
-        Double currentUsage = 0.0;
-        if (meter != null) {
-            List<WaterUsage> usageList = usageRepository.findByMeterMeterIdOrderByYearDescMonthDesc(meter.getMeterId());
-            if (!usageList.isEmpty()) {
-                currentUsage = usageList.get(0).getUnitsConsumed();
+        if (resident == null) {
+            User user = userRepository.findByEmail(residentEmail).orElse(null);
+            if (user != null && user.getRole() == User.Role.RESIDENT) {
+                return ResidentDashboardStats.builder()
+                        .residentName(user.getName())
+                        .buildingName("No Active Apartment")
+                        .apartmentNumber("Vacant / Not Associated")
+                        .meterNumber("N/A")
+                        .currentMonthUsage(0.0)
+                        .activeBillAmount(0.0)
+                        .activeBillStatus("NO_BILLS")
+                        .activeBillDueDate("N/A")
+                        .unreadNotificationsCount(0)
+                        .currentBillingCycle("N/A")
+                        .cycleStartDate("N/A")
+                        .cycleEndDate("N/A")
+                        .hasActiveApartment(false)
+                        .build();
             }
+            throw new ResourceNotFoundException("Resident profile not found for " + residentEmail);
+        }
+
+        Optional<ApartmentOccupancy> activeOcc = occupancyRepository.findActiveByResidentEmail(residentEmail, ApartmentOccupancy.OccupancyStatus.ACTIVE);
+        boolean hasActive = activeOcc.isPresent();
+
+        String buildingName = "No Active Apartment";
+        String apartmentNumber = "Vacant / Not Associated";
+        String meterNumber = "N/A";
+        Double currentUsage = 0.0;
+
+        if (hasActive) {
+            ApartmentOccupancy occ = activeOcc.get();
+            buildingName = occ.getApartment().getBuilding().getBuildingName();
+            apartmentNumber = occ.getApartment().getRoomNumber();
+            WaterMeter meter = meterRepository.findByResidentResidentId(resident.getResidentId()).orElse(null);
+            if (meter == null) {
+                meter = meterRepository.findByBuildingBuildingId(occ.getApartment().getBuilding().getBuildingId()).stream()
+                        .filter(m -> (m.getApartment() != null && m.getApartment().getApartmentId().equals(occ.getApartment().getApartmentId()))
+                                || (m.getMeterNumber() != null && m.getMeterNumber().endsWith("-" + occ.getApartment().getRoomNumber())))
+                        .findFirst()
+                        .orElse(null);
+            }
+            if (meter != null) {
+                meterNumber = meter.getMeterNumber();
+                List<WaterUsage> usageList = usageRepository.findByMeterMeterIdOrderByYearDescMonthDesc(meter.getMeterId());
+                if (!usageList.isEmpty()) {
+                    currentUsage = usageList.get(0).getUnitsConsumed();
+                }
+            }
+        } else if (resident.getBuilding() != null && resident.getApartmentNumber() != null && !resident.getApartmentNumber().startsWith("FORMER") && !resident.getApartmentNumber().equals("PENDING")) {
+            buildingName = resident.getBuilding().getBuildingName();
+            apartmentNumber = resident.getApartmentNumber();
+            WaterMeter meter = meterRepository.findByResidentResidentId(resident.getResidentId()).orElse(null);
+            if (meter != null) {
+                meterNumber = meter.getMeterNumber();
+                List<WaterUsage> usageList = usageRepository.findByMeterMeterIdOrderByYearDescMonthDesc(meter.getMeterId());
+                if (!usageList.isEmpty()) {
+                    currentUsage = usageList.get(0).getUnitsConsumed();
+                }
+            }
+            hasActive = true;
         }
 
         List<Bill> bills = billRepository.findByResidentResidentIdOrderByGeneratedAtDesc(resident.getResidentId());
@@ -415,9 +541,9 @@ public class ResidentService {
 
         return ResidentDashboardStats.builder()
                 .residentName(resident.getName())
-                .buildingName(resident.getBuilding().getBuildingName())
-                .apartmentNumber(resident.getApartmentNumber())
-                .meterNumber(meter != null ? meter.getMeterNumber() : "N/A")
+                .buildingName(buildingName)
+                .apartmentNumber(apartmentNumber)
+                .meterNumber(meterNumber)
                 .currentMonthUsage(currentUsage)
                 .activeBillAmount(latestBill != null ? latestBill.getAmount() : 0.0)
                 .activeBillStatus(latestBill != null ? latestBill.getStatus().name() : "NO_BILLS")
@@ -426,13 +552,37 @@ public class ResidentService {
                 .currentBillingCycle(cycleName)
                 .cycleStartDate(startDate)
                 .cycleEndDate(endDate)
+                .hasActiveApartment(hasActive)
                 .build();
     }
 
     public ResidentComparisonResponse getResidentConsumptionComparison(String residentEmail) {
         Resident resident = residentRepository.findByUserEmail(residentEmail)
                 .or(() -> residentRepository.findByEmail(residentEmail))
-                .orElseThrow(() -> new ResourceNotFoundException("Resident profile not found for " + residentEmail));
+                .orElse(null);
+
+        if (resident == null || resident.getBuilding() == null) {
+            return ResidentComparisonResponse.builder()
+                    .householdUsage(0.0)
+                    .apartmentAverage(0.0)
+                    .similarHouseholdAverage(0.0)
+                    .differenceFromApartmentAverage(0.0)
+                    .percentageDifference(0.0)
+                    .message("Please select an active apartment to view water consumption comparisons.")
+                    .build();
+        }
+
+        Optional<ApartmentOccupancy> activeOcc = occupancyRepository.findActiveByResidentEmail(residentEmail, ApartmentOccupancy.OccupancyStatus.ACTIVE);
+        if (activeOcc.isEmpty() && (resident.getApartmentNumber() == null || resident.getApartmentNumber().startsWith("FORMER") || resident.getApartmentNumber().equals("PENDING"))) {
+            return ResidentComparisonResponse.builder()
+                    .householdUsage(0.0)
+                    .apartmentAverage(0.0)
+                    .similarHouseholdAverage(0.0)
+                    .differenceFromApartmentAverage(0.0)
+                    .percentageDifference(0.0)
+                    .message("You do not currently have an active apartment occupancy. Please select an apartment to view usage comparisons.")
+                    .build();
+        }
 
         WaterMeter meter = meterRepository.findByResidentResidentId(resident.getResidentId()).orElse(null);
         Double householdUsage = 0.0;
@@ -554,18 +704,20 @@ public class ResidentService {
         WaterMeter meter = meterRepository.findByResidentResidentId(resident.getResidentId()).orElse(null);
         String meterNumber = meter != null ? meter.getMeterNumber() : "N/A";
         Long meterId = meter != null ? meter.getMeterId() : null;
+        Long buildingId = resident.getBuilding() != null ? resident.getBuilding().getBuildingId() : null;
+        String buildingName = resident.getBuilding() != null ? resident.getBuilding().getBuildingName() : "N/A";
 
         return ResidentResponse.builder()
                 .residentId(resident.getResidentId())
-                .buildingId(resident.getBuilding().getBuildingId())
-                .buildingName(resident.getBuilding().getBuildingName())
+                .buildingId(buildingId)
+                .buildingName(buildingName)
                 .name(resident.getName())
                 .email(resident.getEmail())
                 .phone(resident.getPhone())
                 .apartmentNumber(resident.getApartmentNumber())
                 .invitationToken(resident.getInvitationToken())
-                .invitationStatus(resident.getInvitationStatus().name())
-                .accountStatus(resident.getAccountStatus().name())
+                .invitationStatus(resident.getInvitationStatus() != null ? resident.getInvitationStatus().name() : "PENDING")
+                .accountStatus(resident.getAccountStatus() != null ? resident.getAccountStatus().name() : "INACTIVE")
                 .meterId(meterId)
                 .meterNumber(meterNumber)
                 .emailSent(false)

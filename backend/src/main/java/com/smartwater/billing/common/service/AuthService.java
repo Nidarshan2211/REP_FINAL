@@ -2,16 +2,20 @@ package com.smartwater.billing.common.service;
 
 import com.smartwater.billing.common.config.JwtUtils;
 import com.smartwater.billing.common.dto.AuthDTOs.*;
+import com.smartwater.billing.resident.dto.OccupancyDTOs.RegisterResidentRequest;
+import com.smartwater.billing.resident.dto.OccupancyDTOs.SubmitOccupancyRequest;
 import com.smartwater.billing.common.entity.*;
 import com.smartwater.billing.owner.entity.*;
 import com.smartwater.billing.resident.entity.*;
+import com.smartwater.billing.resident.entity.ApartmentOccupancy.OccupancyStatus;
 import com.smartwater.billing.common.exception.BadRequestException;
 import com.smartwater.billing.common.exception.ResourceNotFoundException;
 import com.smartwater.billing.common.repository.*;
 import com.smartwater.billing.owner.repository.*;
 import com.smartwater.billing.resident.repository.*;
+import com.smartwater.billing.resident.service.OccupancyService;
 import com.smartwater.billing.common.util.TokenGenerator;
-import lombok.RequiredArgsConstructor;
+import org.springframework.context.annotation.Lazy;
 import org.springframework.security.authentication.AuthenticationManager;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.Authentication;
@@ -20,10 +24,11 @@ import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.util.Optional;
 
 @Service
-
 public class AuthService {
 
     private final AuthenticationManager authenticationManager;
@@ -32,23 +37,37 @@ public class AuthService {
     private final BuildingRepository buildingRepository;
     private final ResidentRepository residentRepository;
     private final ResidentInvitationRepository invitationRepository;
+    private final ApartmentRepository apartmentRepository;
+    private final ApartmentOccupancyRepository occupancyRepository;
+    private final WaterMeterRepository waterMeterRepository;
+    private final OccupancyService occupancyService;
     private final PasswordEncoder passwordEncoder;
     private final JwtUtils jwtUtils;
- 
-    public AuthService(AuthenticationManager authenticationManager,
-                       UserRepository userRepository,
-                       BuildingOwnerRepository ownerRepository,
-                       BuildingRepository buildingRepository,
-                       ResidentRepository residentRepository,
-                       ResidentInvitationRepository invitationRepository,
-                       PasswordEncoder passwordEncoder,
-                       JwtUtils jwtUtils) {
+
+    public AuthService(
+            AuthenticationManager authenticationManager,
+            UserRepository userRepository,
+            BuildingOwnerRepository ownerRepository,
+            BuildingRepository buildingRepository,
+            ResidentRepository residentRepository,
+            ResidentInvitationRepository invitationRepository,
+            ApartmentRepository apartmentRepository,
+            ApartmentOccupancyRepository occupancyRepository,
+            WaterMeterRepository waterMeterRepository,
+            @Lazy OccupancyService occupancyService,
+            PasswordEncoder passwordEncoder,
+            JwtUtils jwtUtils
+    ) {
         this.authenticationManager = authenticationManager;
         this.userRepository = userRepository;
         this.ownerRepository = ownerRepository;
         this.buildingRepository = buildingRepository;
         this.residentRepository = residentRepository;
         this.invitationRepository = invitationRepository;
+        this.apartmentRepository = apartmentRepository;
+        this.occupancyRepository = occupancyRepository;
+        this.waterMeterRepository = waterMeterRepository;
+        this.occupancyService = occupancyService;
         this.passwordEncoder = passwordEncoder;
         this.jwtUtils = jwtUtils;
     }
@@ -154,6 +173,106 @@ public class AuthService {
     }
 
     @Transactional
+    public LoginResponse registerResident(RegisterResidentRequest request) {
+        if (request.getName() == null || request.getName().trim().isEmpty()) {
+            throw new BadRequestException("Full name is required.");
+        }
+        if (request.getEmail() == null || request.getEmail().trim().isEmpty()) {
+            throw new BadRequestException("Email address is required.");
+        }
+        String email = request.getEmail().trim().toLowerCase();
+        if (userRepository.existsByEmail(email)) {
+            throw new BadRequestException("An account with email '" + email + "' is already registered! Please log in.");
+        }
+        if (request.getPassword() == null || request.getPassword().trim().length() < 6) {
+            throw new BadRequestException("Password must be at least 6 characters long.");
+        }
+        if (request.getConfirmPassword() != null && !request.getPassword().equals(request.getConfirmPassword())) {
+            throw new BadRequestException("Passwords do not match.");
+        }
+
+        // Save User with explicit RESIDENT role only
+        User user = User.builder()
+                .name(request.getName().trim())
+                .email(email)
+                .password(passwordEncoder.encode(request.getPassword().trim()))
+                .role(User.Role.RESIDENT)
+                .status(User.UserStatus.ACTIVE)
+                .build();
+        userRepository.save(user);
+
+        // Check if pre-existing resident row exists (e.g. from invitation)
+        Resident resident = residentRepository.findByEmailIgnoreCase(email).orElse(null);
+        if (resident == null) {
+            Building defaultBldg = buildingRepository.findAll().stream().findFirst().orElse(null);
+            resident = Resident.builder()
+                    .user(user)
+                    .building(defaultBldg)
+                    .name(request.getName().trim())
+                    .email(email)
+                    .phone(request.getPhone() != null ? request.getPhone().trim() : "")
+                    .apartmentNumber("PENDING")
+                    .invitationStatus(Resident.InvitationStatus.ACCEPTED)
+                    .accountStatus(Resident.AccountStatus.ACTIVE)
+                    .build();
+            resident = residentRepository.save(resident);
+        } else {
+            resident.setUser(user);
+            resident.setName(request.getName().trim());
+            if (request.getPhone() != null && !request.getPhone().trim().isEmpty()) {
+                resident.setPhone(request.getPhone().trim());
+            }
+            resident.setInvitationStatus(Resident.InvitationStatus.ACCEPTED);
+            resident.setAccountStatus(Resident.AccountStatus.ACTIVE);
+            resident = residentRepository.save(resident);
+        }
+
+        // If an invitation token was provided during registration, validate and bind it
+        if (request.getInvitationToken() != null && !request.getInvitationToken().trim().isEmpty()) {
+            String rawToken = request.getInvitationToken().trim();
+            String tokenHash = TokenGenerator.hashToken(rawToken);
+            ResidentInvitation invitation = invitationRepository.findByTokenHash(tokenHash)
+                    .or(() -> invitationRepository.findByTokenHash(rawToken))
+                    .orElse(null);
+            if (invitation != null) {
+                invitation.setStatus(ResidentInvitation.InvitationStatus.ACCEPTED);
+                invitation.setAcceptedAt(LocalDateTime.now());
+                invitationRepository.save(invitation);
+                if (invitation.getApartment() != null) {
+                    occupancyService.claimApartment(email, invitation.getApartment().getApartmentId());
+                } else if (invitation.getBuilding() != null && invitation.getApartmentNumber() != null) {
+                    Apartment apt = apartmentRepository.findByBuildingBuildingIdAndRoomNumber(
+                            invitation.getBuilding().getBuildingId(),
+                            invitation.getApartmentNumber()
+                    ).orElse(null);
+                    if (apt != null) {
+                        occupancyService.claimApartment(email, apt.getApartmentId());
+                    }
+                }
+            }
+        } else if (request.getApartmentId() != null) {
+            // Automatically submit occupancy request if requested
+            occupancyService.submitOccupancyRequest(email, new SubmitOccupancyRequest(request.getApartmentId(), "Initial registration occupancy request"));
+        }
+
+        Authentication authentication = authenticationManager.authenticate(
+                new UsernamePasswordAuthenticationToken(email, request.getPassword().trim())
+        );
+        SecurityContextHolder.getContext().setAuthentication(authentication);
+        String jwt = jwtUtils.generateJwtToken(authentication);
+
+        return LoginResponse.builder()
+                .token(jwt)
+                .userId(user.getUserId())
+                .name(user.getName())
+                .email(user.getEmail())
+                .phone(resident.getPhone())
+                .role(user.getRole().name())
+                .status(user.getStatus().name())
+                .build();
+    }
+
+    @Transactional
     public MessageResponse acceptInvitation(SetPasswordRequest request) {
         if (request.getPassword() == null || request.getPassword().trim().length() < 6) {
             throw new BadRequestException("Password must be at least 6 characters long.");
@@ -227,13 +346,77 @@ public class AuthService {
         resident.setInvitationStatus(Resident.InvitationStatus.ACCEPTED);
         resident.setAccountStatus(Resident.AccountStatus.ACTIVE);
         resident.setAcceptedAt(now);
-        residentRepository.save(resident);
+        resident = residentRepository.save(resident);
 
         // Update ResidentInvitation entity
         if (invitation != null) {
             invitation.setStatus(ResidentInvitation.InvitationStatus.ACCEPTED);
             invitation.setAcceptedAt(now);
             invitationRepository.save(invitation);
+        }
+
+        // Establish Apartment & Active Occupancy for invited unit
+        Building building = resident.getBuilding();
+        String aptNumber = resident.getApartmentNumber();
+        if (building != null && aptNumber != null && !aptNumber.isEmpty() && !aptNumber.startsWith("FORMER") && !aptNumber.equals("PENDING")) {
+            Apartment apt = null;
+            if (invitation != null && invitation.getApartment() != null) {
+                apt = invitation.getApartment();
+            } else {
+                apt = apartmentRepository.findByBuildingBuildingIdAndRoomNumber(building.getBuildingId(), aptNumber).orElse(null);
+                if (apt == null) {
+                    int floor = 1;
+                    try {
+                        if (aptNumber.length() >= 3) {
+                            floor = Integer.parseInt(aptNumber.substring(0, 1));
+                        }
+                    } catch (Exception ignored) {}
+                    apt = Apartment.builder()
+                            .building(building)
+                            .floorNumber(floor)
+                            .apartmentName("Flat " + aptNumber)
+                            .roomNumber(aptNumber)
+                            .unitType("2BHK")
+                            .build();
+                    apt = apartmentRepository.save(apt);
+                }
+            }
+
+            Optional<ApartmentOccupancy> existingOcc = occupancyRepository.findFirstByApartmentApartmentIdAndStatus(apt.getApartmentId(), OccupancyStatus.ACTIVE);
+            if (existingOcc.isEmpty()) {
+                ApartmentOccupancy occ = ApartmentOccupancy.builder()
+                        .apartment(apt)
+                        .resident(resident)
+                        .startDate(now)
+                        .status(OccupancyStatus.ACTIVE)
+                        .build();
+                occupancyRepository.save(occ);
+            }
+
+            // Link WaterMeter
+            WaterMeter meter = waterMeterRepository.findByResidentResidentId(resident.getResidentId()).orElse(null);
+            if (meter == null) {
+                String mNum = "WM-" + building.getBuildingNumber() + "-" + aptNumber;
+                meter = waterMeterRepository.findByMeterNumber(mNum).orElse(null);
+                if (meter == null) {
+                    meter = WaterMeter.builder()
+                            .building(building)
+                            .apartment(apt)
+                            .resident(resident)
+                            .meterNumber(mNum)
+                            .installationDate(LocalDate.now())
+                            .status(WaterMeter.MeterStatus.ACTIVE)
+                            .build();
+                } else {
+                    meter.setResident(resident);
+                    meter.setApartment(apt);
+                    meter.setStatus(WaterMeter.MeterStatus.ACTIVE);
+                }
+                waterMeterRepository.save(meter);
+            } else if (meter.getApartment() == null) {
+                meter.setApartment(apt);
+                waterMeterRepository.save(meter);
+            }
         }
 
         return new MessageResponse("Account for " + resident.getName() + " activated successfully! You can now log in.");
