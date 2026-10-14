@@ -1,33 +1,34 @@
 import React from 'react';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
-import { AuthProvider } from './context/AuthContext';
+import { AuthProvider } from './shared/context/AuthContext';
 
-import PublicLayout from './layouts/PublicLayout';
-import DashboardLayout from './layouts/DashboardLayout';
+import PublicLayout from './shared/layouts/PublicLayout';
+import DashboardLayout from './shared/layouts/DashboardLayout';
 
-import LandingPage from './pages/Public/LandingPage';
-import LoginPage from './pages/Public/LoginPage';
-import RegisterOwnerPage from './pages/Public/RegisterOwnerPage';
-import AcceptInvitationPage from './pages/Public/AcceptInvitationPage';
+import LandingPage from './shared/auth/LandingPage';
+import LoginPage from './shared/auth/LoginPage';
+import RegisterOwnerPage from './shared/auth/RegisterOwnerPage';
+import AcceptInvitationPage from './shared/auth/AcceptInvitationPage';
 
-import AdminDashboard from './pages/Admin/AdminDashboard';
-import AdminOwnersPage from './pages/Admin/AdminOwnersPage';
-import AdminPendingOwnersPage from './pages/Admin/AdminPendingOwnersPage';
+import AdminDashboard from './superadmin/pages/AdminDashboard';
+import AdminOwnersPage from './superadmin/pages/AdminOwnersPage';
+import AdminPendingOwnersPage from './superadmin/pages/AdminPendingOwnersPage';
 
-import OwnerDashboard from './pages/Owner/OwnerDashboard';
-import OwnerBuildingsPage from './pages/Owner/OwnerBuildingsPage';
-import OwnerResidentsPage from './pages/Owner/OwnerResidentsPage';
-import OwnerUsagePage from './pages/Owner/OwnerUsagePage';
-import OwnerUsageComparisonPage from './pages/Owner/OwnerUsageComparisonPage';
-import OwnerBillingPage from './pages/Owner/OwnerBillingPage';
+import OwnerDashboard from './owner/pages/OwnerDashboard';
+import OwnerBuildingsPage from './owner/pages/OwnerBuildingsPage';
+import OwnerResidentsPage from './owner/pages/OwnerResidentsPage';
+import OwnerUsagePage from './owner/pages/OwnerUsagePage';
+import OwnerUsageComparisonPage from './owner/pages/OwnerUsageComparisonPage';
+import OwnerBillingPage from './owner/pages/OwnerBillingPage';
+import BulkBillingPage from './owner/pages/BulkBillingPage';
 
-import ResidentDashboard from './pages/Resident/ResidentDashboard';
-import ResidentBillsPage from './pages/Resident/ResidentBillsPage';
-import ResidentComparisonPage from './pages/Resident/ResidentComparisonPage';
-import ResidentNotificationsPage from './pages/Resident/ResidentNotificationsPage';
+import ResidentDashboard from './resident/pages/ResidentDashboard';
+import ResidentBillsPage from './resident/pages/ResidentBillsPage';
+import ResidentComparisonPage from './resident/pages/ResidentComparisonPage';
+import ResidentNotificationsPage from './resident/pages/ResidentNotificationsPage';
 
-import ProfilePage from './pages/Common/ProfilePage';
-import InvoicesPage from './pages/Common/InvoicesPage';
+import ProfilePage from './shared/pages/ProfilePage';
+import InvoicesPage from './owner/pages/InvoicesPage';
 
 export default function App() {
   return (
@@ -58,6 +59,7 @@ export default function App() {
             <Route path="/owner/usage" element={<OwnerUsagePage />} />
             <Route path="/owner/usage-comparison" element={<OwnerUsageComparisonPage />} />
             <Route path="/owner/billing" element={<OwnerBillingPage />} />
+            <Route path="/owner/bulk-billing" element={<BulkBillingPage />} />
             <Route path="/owner/invoices" element={<InvoicesPage />} />
             <Route path="/owner/profile" element={<ProfilePage />} />
           </Route>

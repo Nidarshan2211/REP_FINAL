@@ -1,13 +1,19 @@
 package com.smartwater.billing.service;
 
-import com.smartwater.billing.dto.BulkBillingDTOs.BulkImportResponse;
-import com.smartwater.billing.dto.BulkBillingDTOs.BulkValidationResponse;
-import com.smartwater.billing.dto.BulkBillingDTOs.RowStatus;
-import com.smartwater.billing.dto.UsageDTOs.RecordUsageRequest;
-import com.smartwater.billing.dto.UsageDTOs.UsageResponse;
-import com.smartwater.billing.entity.*;
-import com.smartwater.billing.exception.BadRequestException;
-import com.smartwater.billing.repository.*;
+import com.smartwater.billing.owner.dto.BulkBillingDTOs.BulkImportResponse;
+import com.smartwater.billing.owner.dto.BulkBillingDTOs.BulkValidationResponse;
+import com.smartwater.billing.owner.dto.BulkBillingDTOs.RowStatus;
+import com.smartwater.billing.common.dto.UsageDTOs.RecordUsageRequest;
+import com.smartwater.billing.common.dto.UsageDTOs.UsageResponse;
+import com.smartwater.billing.common.entity.*;
+import com.smartwater.billing.owner.entity.*;
+import com.smartwater.billing.resident.entity.*;
+import com.smartwater.billing.common.exception.BadRequestException;
+import com.smartwater.billing.owner.service.BulkBillingService;
+import com.smartwater.billing.common.service.WaterUsageService;
+import com.smartwater.billing.common.repository.*;
+import com.smartwater.billing.owner.repository.*;
+import com.smartwater.billing.resident.repository.*;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -79,7 +85,7 @@ public class CsvMeterReadingInputTest {
     private JavaMailSender mailSender;
 
     @MockBean
-    private com.smartwater.billing.config.DataInitializer dataInitializer;
+    private com.smartwater.billing.common.config.DataInitializer dataInitializer;
 
     private Building building;
     private BuildingOwner owner;
@@ -329,5 +335,45 @@ public class CsvMeterReadingInputTest {
         BillingCycle cycleInDb = billingCycleRepository.findById(cycle.getId()).orElseThrow();
         assertEquals(BillingCycle.CycleStatus.OPEN, cycleInDb.getStatus());
         assertEquals(0, billRepository.count());
+    }
+
+    @Test
+    @DisplayName("Test 7: Dynamic CSV template generation produces clean reusable template with correct identifiers and empty current_reading")
+    void testGenerateTemplate_DynamicAndReusable() throws Exception {
+        byte[] csvBytes = bulkBillingService.generateTemplate(owner.getUser().getEmail(), building.getBuildingId(), cycle.getId());
+        assertNotNull(csvBytes);
+        assertTrue(csvBytes.length > 0);
+
+        List<List<String>> rows = com.smartwater.billing.common.util.CsvHelper.parseCsv(new java.io.ByteArrayInputStream(csvBytes));
+        assertEquals(3, rows.size(), "Should contain 1 header row + 2 resident rows");
+
+        // Header verification
+        List<String> headers = rows.get(0);
+        assertEquals(List.of("resident_id", "apartment_number", "resident_name", "meter_id", "meter_number", "previous_reading", "current_reading"), headers);
+
+        // Row 1 verification (Resident Alice in 101)
+        List<String> row1 = rows.get(1);
+        assertEquals(String.valueOf(resident1.getResidentId()), row1.get(0));
+        assertEquals("101", row1.get(1));
+        assertEquals("Resident Alice", row1.get(2));
+        assertEquals(String.valueOf(meter1.getMeterId()), row1.get(3));
+        assertEquals("WM-SB-101", row1.get(4));
+        assertEquals("0.00", row1.get(5));
+        assertEquals("", row1.get(6), "Current reading must be blank for owner to fill in");
+
+        // Row 2 verification (Resident Bob in 102)
+        List<String> row2 = rows.get(2);
+        assertEquals(String.valueOf(resident2.getResidentId()), row2.get(0));
+        assertEquals("102", row2.get(1));
+        assertEquals("Resident Bob", row2.get(2));
+        assertEquals(String.valueOf(meter2.getMeterId()), row2.get(3));
+        assertEquals("WM-SB-102", row2.get(4));
+        assertEquals("0.00", row2.get(5));
+        assertEquals("", row2.get(6), "Current reading must be blank for owner to fill in");
+
+        // Verify zero database modifications occurred during template generation
+        assertEquals(2, residentRepository.count());
+        assertEquals(2, waterMeterRepository.count());
+        assertEquals(0, waterUsageRepository.count());
     }
 }
