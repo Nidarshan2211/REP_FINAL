@@ -1,16 +1,23 @@
 import React, { useState, useEffect, useContext } from 'react';
+import { useNavigate } from 'react-router-dom';
 import API from '../services/api';
 import { AuthContext } from '../context/AuthContext';
 import LoadingSpinner from '../components/LoadingSpinner';
 
 export default function ProfilePage() {
-  const { user } = useContext(AuthContext);
+  const { user, logout } = useContext(AuthContext);
+  const navigate = useNavigate();
   const [profile, setProfile] = useState(null);
   const [loading, setLoading] = useState(true);
   const [changingPass, setChangingPass] = useState(false);
   const [editingPhone, setEditingPhone] = useState(false);
   const [phoneInput, setPhoneInput] = useState('');
   const [updatingPhone, setUpdatingPhone] = useState(false);
+
+  // Leave Application State (for Building Owners)
+  const [showLeaveModal, setShowLeaveModal] = useState(false);
+  const [leaveConfirmText, setLeaveConfirmText] = useState('');
+  const [leavingApp, setLeavingApp] = useState(false);
 
   // Password Change Form
   const [currentPassword, setCurrentPassword] = useState('');
@@ -93,6 +100,26 @@ export default function ProfilePage() {
       setMessage({ type: 'error', text: err.response?.data?.message || 'Password update failed' });
     } finally {
       setChangingPass(false);
+    }
+  };
+
+  const handleLeaveApplication = async () => {
+    setLeavingApp(true);
+    setMessage(null);
+    try {
+      try {
+        await API.delete('/owners/leave');
+      } catch (e) {
+        await API.delete('/owner/leave');
+      }
+      setShowLeaveModal(false);
+      logout();
+      navigate('/login');
+    } catch (err) {
+      setMessage({ type: 'error', text: err.response?.data?.message || 'Failed to complete account closure. Please try again.' });
+      setShowLeaveModal(false);
+    } finally {
+      setLeavingApp(false);
     }
   };
 
@@ -272,6 +299,104 @@ export default function ProfilePage() {
           </button>
         </form>
       </div>
+
+      {/* Danger Zone: Leave Application Option for Building Owner */}
+      {displayUser.role === 'BUILDING_OWNER' && (
+        <div className="card border-danger shadow-xs p-4 bg-white rounded-4 mt-4">
+          <div className="d-flex align-items-center justify-content-between flex-wrap gap-3">
+            <div>
+              <div className="d-flex align-items-center gap-2 mb-1">
+                <span className="badge bg-danger text-white fs-8 text-uppercase px-2 py-1">Danger Zone</span>
+                <h5 className="fw-bold mb-0 text-danger">Leave AquaFlow Application</h5>
+              </div>
+              <p className="text-muted fs-7 mb-0">
+                Permanently close your building owner account, delete your properties, and leave the platform.
+              </p>
+            </div>
+            <button
+              type="button"
+              className="btn btn-outline-danger fw-bold px-4 d-flex align-items-center gap-2"
+              onClick={() => {
+                setLeaveConfirmText('');
+                setShowLeaveModal(true);
+              }}
+            >
+              <i className="bi bi-box-arrow-left"></i>
+              <span>Leave Application</span>
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Confirmation Modal for Leaving Application */}
+      {showLeaveModal && (
+        <div className="modal show d-block" tabIndex="-1" style={{ backgroundColor: 'rgba(0,0,0,0.5)' }}>
+          <div className="modal-dialog modal-dialog-centered">
+            <div className="modal-content rounded-4 border-0 shadow">
+              <div className="modal-header border-0 pb-0">
+                <div className="d-flex align-items-center gap-2 text-danger">
+                  <i className="bi bi-exclamation-triangle-fill fs-4"></i>
+                  <h5 className="modal-title fw-bold">Leave AquaFlow Platform?</h5>
+                </div>
+                <button
+                  type="button"
+                  className="btn-close"
+                  onClick={() => setShowLeaveModal(false)}
+                  disabled={leavingApp}
+                ></button>
+              </div>
+              <div className="modal-body py-3">
+                <p className="text-dark mb-2">
+                  Are you sure you want to permanently close your building owner account and leave AquaFlow?
+                </p>
+                <div className="alert alert-danger p-2.5 rounded-3 fs-8 mb-3">
+                  <strong>Warning:</strong> All your registered buildings, apartment units, water meter configurations, and pending requests will be completely and permanently removed. This action cannot be reversed.
+                </div>
+                <p className="text-muted fs-8 mb-2">
+                  Please type <strong className="text-danger">LEAVE</strong> below to confirm:
+                </p>
+                <input
+                  type="text"
+                  className="form-control text-uppercase fw-bold"
+                  placeholder="Type LEAVE to confirm"
+                  value={leaveConfirmText}
+                  onChange={(e) => setLeaveConfirmText(e.target.value)}
+                  autoFocus
+                />
+              </div>
+              <div className="modal-footer border-0 pt-0">
+                <button
+                  type="button"
+                  className="btn btn-light fw-semibold"
+                  onClick={() => setShowLeaveModal(false)}
+                  disabled={leavingApp}
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  className="btn btn-danger fw-bold px-3 d-flex align-items-center gap-1.5"
+                  onClick={handleLeaveApplication}
+                  disabled={leavingApp || leaveConfirmText.trim().toUpperCase() !== 'LEAVE'}
+                >
+                  {leavingApp ? (
+                    <>
+                      <span className="spinner-border spinner-border-sm" role="status"></span>
+                      <span>Closing Account...</span>
+                    </>
+                  ) : (
+                    <>
+                      <i className="bi bi-box-arrow-left"></i>
+                      <span>Yes, Leave Application</span>
+                    </>
+                  )}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
+

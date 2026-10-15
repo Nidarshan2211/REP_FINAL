@@ -41,8 +41,9 @@ public class BulkBillingService {
     private final TariffCalculationService tariffCalculationService;
     private final BillingCycleService billingCycleService;
     private final AlertEngineService alertEngineService;
+    private final ApartmentRepository apartmentRepository;
 
-    public BulkBillingService(BuildingRepository buildingRepository, BillingCycleRepository billingCycleRepository, ResidentRepository residentRepository, WaterMeterRepository waterMeterRepository, WaterUsageRepository usageRepository, BillRepository billRepository, NotificationRepository notificationRepository, BuildingOwnerService ownerService, TariffCalculationService tariffCalculationService, BillingCycleService billingCycleService, AlertEngineService alertEngineService) {
+    public BulkBillingService(BuildingRepository buildingRepository, BillingCycleRepository billingCycleRepository, ResidentRepository residentRepository, WaterMeterRepository waterMeterRepository, WaterUsageRepository usageRepository, BillRepository billRepository, NotificationRepository notificationRepository, BuildingOwnerService ownerService, TariffCalculationService tariffCalculationService, BillingCycleService billingCycleService, AlertEngineService alertEngineService, ApartmentRepository apartmentRepository) {
         this.buildingRepository = buildingRepository;
         this.billingCycleRepository = billingCycleRepository;
         this.residentRepository = residentRepository;
@@ -54,8 +55,45 @@ public class BulkBillingService {
         this.tariffCalculationService = tariffCalculationService;
         this.billingCycleService = billingCycleService;
         this.alertEngineService = alertEngineService;
+        this.apartmentRepository = apartmentRepository;
     }
 
+
+    /**
+     * Resolves the authoritative trusted previous reading for a given meter and billing cycle.
+     * 
+     * Invariants:
+     * 1. If an existing WaterUsage record has already been logged for this EXACT cycle (e.g. from prior CSV import),
+     *    the starting meter reading of this cycle is that record's previousReading.
+     * 2. Otherwise, the starting reading of this cycle is the currentReading of the most recent historical
+     *    WaterUsage record from a PRECEDING cycle (i.e. where cycle ID != currentCycleId).
+     * 3. If no historical usage exists for this meter, the initial starting reading is 0.00.
+     */
+    public double getTrustedPreviousReading(Long meterId, Long currentCycleId) {
+        if (meterId == null) return 0.0;
+
+        // 1. Check if a reading was already recorded in this cycle
+        if (currentCycleId != null) {
+            Optional<WaterUsage> currentCycleUsage = usageRepository.findByMeterMeterIdAndBillingCycleId(meterId, currentCycleId);
+            if (currentCycleUsage.isPresent()) {
+                return currentCycleUsage.get().getPreviousReading();
+            }
+        }
+
+        // 2. Query historical usages for this meter, excluding the current cycle
+        List<WaterUsage> historical = usageRepository.findByMeterMeterIdOrderByYearDescMonthDesc(meterId);
+        WaterUsage priorUsage = historical.stream()
+                .filter(u -> u.getBillingCycle() == null || (currentCycleId == null || !currentCycleId.equals(u.getBillingCycle().getId())))
+                .findFirst()
+                .orElse(null);
+
+        if (priorUsage != null) {
+            return priorUsage.getCurrentReading();
+        }
+
+        // 3. Brand new meter / no prior usage
+        return 0.0;
+    }
 
     /**
      * Generates a pre-populated CSV template containing all active residents and meters
@@ -100,9 +138,36 @@ public class BulkBillingService {
                     .or(() -> waterMeterRepository.findByResidentResidentId(resident.getResidentId()))
                     .orElse(null);
 
-            if (meter == null) {
+            if (meter == null && resident.getApartmentNumber() != null) {
+                List<WaterMeter> bMeters = waterMeterRepository.findByBuildingBuildingId(buildingId);
+                meter = bMeters.stream()
+                        .filter(m -> m.getApartment() != null && resident.getApartmentNumber().equalsIgnoreCase(m.getApartment().getRoomNumber()))
+                        .findFirst()
+                        .orElse(null);
+            }
+
+            if (meter == null && resident.getApartmentNumber() != null) {
                 String mNum = "WM-" + building.getBuildingNumber() + "-" + resident.getApartmentNumber();
                 meter = waterMeterRepository.findByMeterNumber(mNum).orElse(null);
+            }
+
+            if (meter == null) {
+                String mNum = "WM-" + building.getBuildingNumber() + "-" + (resident.getApartmentNumber() != null ? resident.getApartmentNumber() : "RES-" + resident.getResidentId());
+                Apartment apt = resident.getApartmentNumber() != null
+                        ? apartmentRepository.findByBuildingBuildingIdAndRoomNumber(buildingId, resident.getApartmentNumber()).orElse(null)
+                        : null;
+                meter = WaterMeter.builder()
+                        .building(building)
+                        .apartment(apt)
+                        .resident(resident)
+                        .meterNumber(mNum)
+                        .installationDate(LocalDate.now())
+                        .status(WaterMeter.MeterStatus.ACTIVE)
+                        .build();
+                meter = waterMeterRepository.save(meter);
+            } else if (meter.getResident() == null || !meter.getResident().getResidentId().equals(resident.getResidentId())) {
+                meter.setResident(resident);
+                waterMeterRepository.save(meter);
             }
 
             String meterIdStr = "";
@@ -112,22 +177,7 @@ public class BulkBillingService {
             if (meter != null) {
                 meterIdStr = String.valueOf(meter.getMeterId());
                 meterNumberStr = meter.getMeterNumber() != null ? meter.getMeterNumber() : "";
-
-                Long activeMeterId = meter.getMeterId();
-                // Check if reading was already recorded in this cycle
-                WaterUsage currentCycleUsage = usageRepository.findByMeterMeterIdAndBillingCycleId(activeMeterId, cycleId).orElse(null);
-                if (currentCycleUsage != null) {
-                    prevReading = currentCycleUsage.getPreviousReading();
-                } else {
-                    List<WaterUsage> historical = usageRepository.findByMeterMeterIdOrderByYearDescMonthDesc(activeMeterId);
-                    WaterUsage priorUsage = historical.stream()
-                            .filter(u -> u.getBillingCycle() == null || !cycleId.equals(u.getBillingCycle().getId()))
-                            .findFirst()
-                            .orElse(null);
-                    if (priorUsage != null) {
-                        prevReading = priorUsage.getCurrentReading();
-                    }
-                }
+                prevReading = getTrustedPreviousReading(meter.getMeterId(), cycleId);
             }
 
             List<String> row = List.of(
@@ -275,22 +325,71 @@ public class BulkBillingService {
 
                 // 2. Extract and Validate meter_id
                 String meterIdStr = getColumnValue(rowData, colMap, "meter_id");
+                String meterNumFromCsv = getColumnValue(rowData, colMap, "meter_number");
                 Long meterId = null;
                 if (meterIdStr != null && !meterIdStr.isBlank()) {
-                    meterId = Long.parseLong(meterIdStr.trim());
+                    try {
+                        meterId = Long.parseLong(meterIdStr.trim());
+                    } catch (NumberFormatException ignored) {}
                 }
-                WaterMeter meter = meterId != null 
-                        ? waterMeterRepository.findById(meterId).orElse(null)
-                        : waterMeterRepository.findFirstByResidentResidentId(residentId).orElse(null);
+
+                WaterMeter meter = null;
+                if (meterId != null) {
+                    meter = waterMeterRepository.findById(meterId).orElse(null);
+                }
+
+                if (meter == null && meterNumFromCsv != null && !meterNumFromCsv.isBlank()) {
+                    meter = waterMeterRepository.findByMeterNumber(meterNumFromCsv.trim()).orElse(null);
+                }
 
                 if (meter == null) {
-                    throw new IllegalArgumentException("No water meter assigned to resident " + resident.getName());
+                    meter = waterMeterRepository.findFirstByResidentResidentId(residentId)
+                            .or(() -> waterMeterRepository.findByResidentResidentId(residentId))
+                            .orElse(null);
                 }
+
+                if (meter == null && resident.getApartmentNumber() != null) {
+                    List<WaterMeter> bMeters = waterMeterRepository.findByBuildingBuildingId(buildingId);
+                    meter = bMeters.stream()
+                            .filter(m -> m.getApartment() != null && resident.getApartmentNumber().equalsIgnoreCase(m.getApartment().getRoomNumber()))
+                            .findFirst()
+                            .orElse(null);
+                }
+
+                if (meter == null && resident.getApartmentNumber() != null) {
+                    String mNum = "WM-" + building.getBuildingNumber() + "-" + resident.getApartmentNumber();
+                    meter = waterMeterRepository.findByMeterNumber(mNum).orElse(null);
+                }
+
+                if (meter == null) {
+                    String mNum = (meterNumFromCsv != null && !meterNumFromCsv.isBlank())
+                            ? meterNumFromCsv.trim()
+                            : "WM-" + building.getBuildingNumber() + "-" + (resident.getApartmentNumber() != null ? resident.getApartmentNumber() : "RES-" + residentId);
+                    Apartment apt = resident.getApartmentNumber() != null
+                            ? apartmentRepository.findByBuildingBuildingIdAndRoomNumber(buildingId, resident.getApartmentNumber()).orElse(null)
+                            : null;
+                    meter = WaterMeter.builder()
+                            .building(building)
+                            .apartment(apt)
+                            .resident(resident)
+                            .meterNumber(mNum)
+                            .installationDate(LocalDate.now())
+                            .status(WaterMeter.MeterStatus.ACTIVE)
+                            .build();
+                    meter = waterMeterRepository.save(meter);
+                }
+
                 if (!meter.getBuilding().getBuildingId().equals(buildingId)) {
                     throw new IllegalArgumentException("Water meter #" + meter.getMeterNumber() + " belongs to a different building");
                 }
+
+                if (meter.getResident() != null && !residentId.equals(meter.getResident().getResidentId())) {
+                    throw new IllegalArgumentException("Water meter #" + meter.getMeterNumber() + " is already assigned to resident " + meter.getResident().getName() + " (Apartment " + meter.getResident().getApartmentNumber() + ")");
+                }
+
                 rowDto.setMeterId(meter.getMeterId());
                 rowDto.setMeterNumber(meter.getMeterNumber());
+                rowDto.setApartmentNumber(resident.getApartmentNumber());
 
                 if (!seenMeterIds.add(meter.getMeterId())) {
                     rowDto.setStatus(RowStatus.DUPLICATE_ROW);
@@ -309,15 +408,7 @@ public class BulkBillingService {
                     continue;
                 }
 
-                Long activeMeterId = meter.getMeterId();
-                WaterUsage lastLog = usageRepository.findTopByMeterMeterIdOrderByRecordedAtDesc(activeMeterId).orElse(null);
-                if (lastLog == null) {
-                    List<WaterUsage> list = usageRepository.findByMeterMeterIdOrderByYearDescMonthDesc(activeMeterId);
-                    if (!list.isEmpty()) {
-                        lastLog = list.get(0);
-                    }
-                }
-                double trustedPrevReading = lastLog != null ? lastLog.getCurrentReading() : 0.0;
+                double trustedPrevReading = getTrustedPreviousReading(meter.getMeterId(), cycleId);
 
                 String prevStr = getColumnValue(rowData, colMap, "previous_reading");
                 double prevReading = trustedPrevReading;
@@ -345,6 +436,15 @@ public class BulkBillingService {
                     throw new IllegalArgumentException(String.format(Locale.US,
                             "Decreasing meter reading: Current reading (%.2f) cannot be less than previous reading (%.2f)",
                             curReading, prevReading));
+                }
+
+                // Anti-Tampering Check: Uploaded previous reading must strictly match trusted DB previous reading
+                if (prevStr != null && !prevStr.isBlank()) {
+                    if (Math.abs(prevReading - trustedPrevReading) > 0.001) {
+                        throw new IllegalArgumentException(String.format(Locale.US,
+                                "Previous reading mismatch for resident %s (Meter: %s). Uploaded: %.2f, Trusted Database: %.2f. Tampering detected.",
+                                resident.getName(), meter.getMeterNumber(), prevReading, trustedPrevReading));
+                    }
                 }
 
                 // 6. Calculate units & estimate charge server-side
@@ -707,39 +807,80 @@ public class BulkBillingService {
 
             // Meter ID
             String meterIdStr = getColumnValue(rowData, colMap, "meter_id");
+            String meterNumFromCsv = getColumnValue(rowData, colMap, "meter_number");
             Long meterId = null;
             if (meterIdStr != null && !meterIdStr.isBlank()) {
                 try {
                     meterId = Long.parseLong(meterIdStr.trim());
-                } catch (NumberFormatException nfe) {
-                    throw new BadRequestException("Row " + rowNumber + ": Invalid numeric meter_id '" + meterIdStr + "'.");
-                }
+                } catch (NumberFormatException ignored) {}
             }
 
-            WaterMeter meter = meterId != null
-                    ? waterMeterRepository.findById(meterId).orElse(null)
-                    : waterMeterRepository.findFirstByResidentResidentId(residentId).orElse(null);
+            WaterMeter meter = null;
+            if (meterId != null) {
+                meter = waterMeterRepository.findById(meterId).orElse(null);
+            }
+
+            if (meter == null && meterNumFromCsv != null && !meterNumFromCsv.isBlank()) {
+                meter = waterMeterRepository.findByMeterNumber(meterNumFromCsv.trim()).orElse(null);
+            }
 
             if (meter == null) {
-                throw new BadRequestException("Row " + rowNumber + ": No water meter found for resident " + resident.getName() + ".");
+                meter = waterMeterRepository.findFirstByResidentResidentId(residentId)
+                        .or(() -> waterMeterRepository.findByResidentResidentId(residentId))
+                        .orElse(null);
             }
+
+            if (meter == null && resident.getApartmentNumber() != null) {
+                List<WaterMeter> bMeters = waterMeterRepository.findByBuildingBuildingId(buildingId);
+                meter = bMeters.stream()
+                        .filter(m -> m.getApartment() != null && resident.getApartmentNumber().equalsIgnoreCase(m.getApartment().getRoomNumber()))
+                        .findFirst()
+                        .orElse(null);
+            }
+
+            if (meter == null && resident.getApartmentNumber() != null) {
+                String mNum = "WM-" + building.getBuildingNumber() + "-" + resident.getApartmentNumber();
+                meter = waterMeterRepository.findByMeterNumber(mNum).orElse(null);
+            }
+
+            if (meter == null) {
+                String mNum = (meterNumFromCsv != null && !meterNumFromCsv.isBlank())
+                        ? meterNumFromCsv.trim()
+                        : "WM-" + building.getBuildingNumber() + "-" + (resident.getApartmentNumber() != null ? resident.getApartmentNumber() : "RES-" + residentId);
+                Apartment apt = resident.getApartmentNumber() != null
+                        ? apartmentRepository.findByBuildingBuildingIdAndRoomNumber(buildingId, resident.getApartmentNumber()).orElse(null)
+                        : null;
+                meter = WaterMeter.builder()
+                        .building(building)
+                        .apartment(apt)
+                        .resident(resident)
+                        .meterNumber(mNum)
+                        .installationDate(LocalDate.now())
+                        .status(WaterMeter.MeterStatus.ACTIVE)
+                        .build();
+                meter = waterMeterRepository.save(meter);
+            }
+
             if (!meter.getBuilding().getBuildingId().equals(buildingId)) {
                 throw new BadRequestException("Row " + rowNumber + ": Water meter #" + meter.getMeterNumber() + " belongs to a different building.");
             }
+
+            if (meter.getResident() != null && !residentId.equals(meter.getResident().getResidentId())) {
+                throw new BadRequestException("Row " + rowNumber + ": Water meter #" + meter.getMeterNumber() + " is already assigned to resident " + meter.getResident().getName() + ".");
+            }
+
+            // Ensure unassigned meter is linked to this resident
+            if (meter.getResident() == null) {
+                meter.setResident(resident);
+                meter = waterMeterRepository.save(meter);
+            }
+
             if (!seenMeterIds.add(meter.getMeterId())) {
                 throw new BadRequestException("Row " + rowNumber + ": Duplicate water meter #" + meter.getMeterNumber() + " in CSV.");
             }
 
             // Trusted DB Previous Reading Verification
-            Long activeMeterId = meter.getMeterId();
-            WaterUsage lastLog = usageRepository.findTopByMeterMeterIdOrderByRecordedAtDesc(activeMeterId).orElse(null);
-            if (lastLog == null) {
-                List<WaterUsage> list = usageRepository.findByMeterMeterIdOrderByYearDescMonthDesc(activeMeterId);
-                if (!list.isEmpty()) {
-                    lastLog = list.get(0);
-                }
-            }
-            double trustedPrevReading = lastLog != null ? lastLog.getCurrentReading() : 0.0;
+            double trustedPrevReading = getTrustedPreviousReading(meter.getMeterId(), cycleId);
 
             String prevStr = getColumnValue(rowData, colMap, "previous_reading");
             if (prevStr != null && !prevStr.isBlank()) {

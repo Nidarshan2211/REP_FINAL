@@ -21,6 +21,7 @@ public class ApartmentDTOs {
 
         private String unitType;
         private String description;
+        private String meterNumber;
 
         public CreateApartmentRequest() {}
 
@@ -41,6 +42,38 @@ public class ApartmentDTOs {
 
         public String getDescription() { return description; }
         public void setDescription(String description) { this.description = description; }
+
+        public String getMeterNumber() { return meterNumber; }
+        public void setMeterNumber(String meterNumber) { this.meterNumber = meterNumber; }
+    }
+
+    public static class RoomMeterConfig {
+        private String roomNumber;
+        private String meterNumber;
+
+        public RoomMeterConfig() {}
+        public RoomMeterConfig(String roomNumber, String meterNumber) {
+            this.roomNumber = roomNumber;
+            this.meterNumber = meterNumber;
+        }
+
+        public String getRoomNumber() { return roomNumber; }
+        public void setRoomNumber(String roomNumber) { this.roomNumber = roomNumber; }
+
+        public String getMeterNumber() { return meterNumber; }
+        public void setMeterNumber(String meterNumber) { this.meterNumber = meterNumber; }
+    }
+
+    public static class UpdateApartmentMeterRequest {
+        private String meterNumber;
+
+        public UpdateApartmentMeterRequest() {}
+        public UpdateApartmentMeterRequest(String meterNumber) {
+            this.meterNumber = meterNumber;
+        }
+
+        public String getMeterNumber() { return meterNumber; }
+        public void setMeterNumber(String meterNumber) { this.meterNumber = meterNumber; }
     }
 
     public static class BatchCreateApartmentsRequest {
@@ -54,6 +87,9 @@ public class ApartmentDTOs {
         private List<String> roomNumbers;
 
         private String unitType;
+        private String meterPrefix;
+        private List<String> meterNumbers;
+        private List<RoomMeterConfig> roomMeters;
 
         public BatchCreateApartmentsRequest() {}
 
@@ -68,6 +104,15 @@ public class ApartmentDTOs {
 
         public String getUnitType() { return unitType; }
         public void setUnitType(String unitType) { this.unitType = unitType; }
+
+        public String getMeterPrefix() { return meterPrefix; }
+        public void setMeterPrefix(String meterPrefix) { this.meterPrefix = meterPrefix; }
+
+        public List<String> getMeterNumbers() { return meterNumbers; }
+        public void setMeterNumbers(List<String> meterNumbers) { this.meterNumbers = meterNumbers; }
+
+        public List<RoomMeterConfig> getRoomMeters() { return roomMeters; }
+        public void setRoomMeters(List<RoomMeterConfig> roomMeters) { this.roomMeters = roomMeters; }
     }
 
     public static class ApartmentResponse {
@@ -86,6 +131,7 @@ public class ApartmentDTOs {
         private String currentResidentName;
         private String currentResidentEmail;
         private String currentResidentPhone;
+        private Long meterId;
         private String meterNumber;
         private LocalDateTime occupiedSince;
         private LocalDateTime createdAt;
@@ -140,6 +186,9 @@ public class ApartmentDTOs {
         public String getCurrentResidentPhone() { return currentResidentPhone; }
         public void setCurrentResidentPhone(String currentResidentPhone) { this.currentResidentPhone = currentResidentPhone; }
 
+        public Long getMeterId() { return meterId; }
+        public void setMeterId(Long meterId) { this.meterId = meterId; }
+
         public String getMeterNumber() { return meterNumber; }
         public void setMeterNumber(String meterNumber) { this.meterNumber = meterNumber; }
 
@@ -176,6 +225,7 @@ public class ApartmentDTOs {
             private String currentResidentName;
             private String currentResidentEmail;
             private String currentResidentPhone;
+            private Long meterId;
             private String meterNumber;
             private LocalDateTime occupiedSince;
             private LocalDateTime createdAt;
@@ -198,6 +248,7 @@ public class ApartmentDTOs {
             public Builder currentResidentName(String n) { this.currentResidentName = n; return this; }
             public Builder currentResidentEmail(String e) { this.currentResidentEmail = e; return this; }
             public Builder currentResidentPhone(String p) { this.currentResidentPhone = p; return this; }
+            public Builder meterId(Long id) { this.meterId = id; return this; }
             public Builder meterNumber(String m) { this.meterNumber = m; return this; }
             public Builder occupiedSince(LocalDateTime d) { this.occupiedSince = d; return this; }
             public Builder createdAt(LocalDateTime d) { this.createdAt = d; return this; }
@@ -222,6 +273,7 @@ public class ApartmentDTOs {
                 r.setCurrentResidentName(currentResidentName);
                 r.setCurrentResidentEmail(currentResidentEmail);
                 r.setCurrentResidentPhone(currentResidentPhone);
+                r.setMeterId(meterId);
                 r.setMeterNumber(meterNumber);
                 r.setOccupiedSince(occupiedSince);
                 r.setCreatedAt(createdAt);

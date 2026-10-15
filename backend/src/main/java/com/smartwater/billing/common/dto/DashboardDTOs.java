@@ -294,26 +294,42 @@ public class DashboardDTOs {
 
     public static class OwnerHouseholdUsageDTO {
         private Long residentId;
+        private Long apartmentId;
+        private Integer floorNumber;
         private String apartmentNumber;
         private String residentName;
         private String meterNumber;
         private Double unitsConsumed;
         private String status;
         private Double apartmentAverage;
+        private Boolean isOccupied;
 
         public OwnerHouseholdUsageDTO() {}
         public OwnerHouseholdUsageDTO(Long residentId, String apartmentNumber, String residentName, String meterNumber, Double unitsConsumed, String status, Double apartmentAverage) {
+            this(residentId, null, null, apartmentNumber, residentName, meterNumber, unitsConsumed, status, apartmentAverage, residentId != null);
+        }
+
+        public OwnerHouseholdUsageDTO(Long residentId, Long apartmentId, Integer floorNumber, String apartmentNumber, String residentName, String meterNumber, Double unitsConsumed, String status, Double apartmentAverage, Boolean isOccupied) {
             this.residentId = residentId;
+            this.apartmentId = apartmentId;
+            this.floorNumber = floorNumber;
             this.apartmentNumber = apartmentNumber;
             this.residentName = residentName;
             this.meterNumber = meterNumber;
             this.unitsConsumed = unitsConsumed;
             this.status = status;
             this.apartmentAverage = apartmentAverage;
+            this.isOccupied = isOccupied;
         }
 
         public Long getResidentId() { return residentId; }
         public void setResidentId(Long residentId) { this.residentId = residentId; }
+
+        public Long getApartmentId() { return apartmentId; }
+        public void setApartmentId(Long apartmentId) { this.apartmentId = apartmentId; }
+
+        public Integer getFloorNumber() { return floorNumber; }
+        public void setFloorNumber(Integer floorNumber) { this.floorNumber = floorNumber; }
 
         public String getApartmentNumber() { return apartmentNumber; }
         public void setApartmentNumber(String apartmentNumber) { this.apartmentNumber = apartmentNumber; }
@@ -333,27 +349,36 @@ public class DashboardDTOs {
         public Double getApartmentAverage() { return apartmentAverage; }
         public void setApartmentAverage(Double apartmentAverage) { this.apartmentAverage = apartmentAverage; }
 
+        public Boolean getIsOccupied() { return isOccupied; }
+        public void setIsOccupied(Boolean isOccupied) { this.isOccupied = isOccupied; }
+
         public static Builder builder() { return new Builder(); }
 
         public static class Builder {
             private Long residentId;
+            private Long apartmentId;
+            private Integer floorNumber;
             private String apartmentNumber;
             private String residentName;
             private String meterNumber;
             private Double unitsConsumed;
             private String status;
             private Double apartmentAverage;
+            private Boolean isOccupied;
 
             public Builder residentId(Long residentId) { this.residentId = residentId; return this; }
+            public Builder apartmentId(Long apartmentId) { this.apartmentId = apartmentId; return this; }
+            public Builder floorNumber(Integer floorNumber) { this.floorNumber = floorNumber; return this; }
             public Builder apartmentNumber(String apartmentNumber) { this.apartmentNumber = apartmentNumber; return this; }
             public Builder residentName(String residentName) { this.residentName = residentName; return this; }
             public Builder meterNumber(String meterNumber) { this.meterNumber = meterNumber; return this; }
             public Builder unitsConsumed(Double unitsConsumed) { this.unitsConsumed = unitsConsumed; return this; }
             public Builder status(String status) { this.status = status; return this; }
             public Builder apartmentAverage(Double apartmentAverage) { this.apartmentAverage = apartmentAverage; return this; }
+            public Builder isOccupied(Boolean isOccupied) { this.isOccupied = isOccupied; return this; }
 
             public OwnerHouseholdUsageDTO build() {
-                return new OwnerHouseholdUsageDTO(residentId, apartmentNumber, residentName, meterNumber, unitsConsumed, status, apartmentAverage);
+                return new OwnerHouseholdUsageDTO(residentId, apartmentId, floorNumber, apartmentNumber, residentName, meterNumber, unitsConsumed, status, apartmentAverage, isOccupied != null ? isOccupied : (residentId != null));
             }
         }
     }
@@ -362,13 +387,25 @@ public class DashboardDTOs {
         private Long buildingId;
         private String buildingName;
         private Double buildingAverage;
+        private Long billingCycleId;
+        private String billingMonth;
+        private Integer totalApartments;
+        private Integer activeApartments;
         private List<OwnerHouseholdUsageDTO> households;
 
         public OwnerUsageComparisonResponse() {}
         public OwnerUsageComparisonResponse(Long buildingId, String buildingName, Double buildingAverage, List<OwnerHouseholdUsageDTO> households) {
+            this(buildingId, buildingName, buildingAverage, null, null, households != null ? households.size() : 0, null, households);
+        }
+
+        public OwnerUsageComparisonResponse(Long buildingId, String buildingName, Double buildingAverage, Long billingCycleId, String billingMonth, Integer totalApartments, Integer activeApartments, List<OwnerHouseholdUsageDTO> households) {
             this.buildingId = buildingId;
             this.buildingName = buildingName;
             this.buildingAverage = buildingAverage;
+            this.billingCycleId = billingCycleId;
+            this.billingMonth = billingMonth;
+            this.totalApartments = totalApartments;
+            this.activeApartments = activeApartments;
             this.households = households;
         }
 
@@ -381,6 +418,18 @@ public class DashboardDTOs {
         public Double getBuildingAverage() { return buildingAverage; }
         public void setBuildingAverage(Double buildingAverage) { this.buildingAverage = buildingAverage; }
 
+        public Long getBillingCycleId() { return billingCycleId; }
+        public void setBillingCycleId(Long billingCycleId) { this.billingCycleId = billingCycleId; }
+
+        public String getBillingMonth() { return billingMonth; }
+        public void setBillingMonth(String billingMonth) { this.billingMonth = billingMonth; }
+
+        public Integer getTotalApartments() { return totalApartments; }
+        public void setTotalApartments(Integer totalApartments) { this.totalApartments = totalApartments; }
+
+        public Integer getActiveApartments() { return activeApartments; }
+        public void setActiveApartments(Integer activeApartments) { this.activeApartments = activeApartments; }
+
         public List<OwnerHouseholdUsageDTO> getHouseholds() { return households; }
         public void setHouseholds(List<OwnerHouseholdUsageDTO> households) { this.households = households; }
 
@@ -390,15 +439,23 @@ public class DashboardDTOs {
             private Long buildingId;
             private String buildingName;
             private Double buildingAverage;
+            private Long billingCycleId;
+            private String billingMonth;
+            private Integer totalApartments;
+            private Integer activeApartments;
             private List<OwnerHouseholdUsageDTO> households;
 
             public Builder buildingId(Long buildingId) { this.buildingId = buildingId; return this; }
             public Builder buildingName(String buildingName) { this.buildingName = buildingName; return this; }
             public Builder buildingAverage(Double buildingAverage) { this.buildingAverage = buildingAverage; return this; }
+            public Builder billingCycleId(Long billingCycleId) { this.billingCycleId = billingCycleId; return this; }
+            public Builder billingMonth(String billingMonth) { this.billingMonth = billingMonth; return this; }
+            public Builder totalApartments(Integer totalApartments) { this.totalApartments = totalApartments; return this; }
+            public Builder activeApartments(Integer activeApartments) { this.activeApartments = activeApartments; return this; }
             public Builder households(List<OwnerHouseholdUsageDTO> households) { this.households = households; return this; }
 
             public OwnerUsageComparisonResponse build() {
-                return new OwnerUsageComparisonResponse(buildingId, buildingName, buildingAverage, households);
+                return new OwnerUsageComparisonResponse(buildingId, buildingName, buildingAverage, billingCycleId, billingMonth, totalApartments, activeApartments, households);
             }
         }
     }
@@ -517,4 +574,67 @@ public class DashboardDTOs {
         public String getActor() { return actor; }
         public void setActor(String actor) { this.actor = actor; }
     }
+
+    public static class ResidentHistoryItemDTO {
+        private String id;
+        private String activityType; // "JOINED", "LEFT"
+        private String residentName;
+        private String residentEmail;
+        private String residentPhone;
+        private String buildingName;
+        private String apartmentName;
+        private String roomNumber;
+        private String details;
+        private String actor;
+        private String timestamp;
+
+        public ResidentHistoryItemDTO() {}
+        public ResidentHistoryItemDTO(String id, String activityType, String residentName, String residentEmail, String residentPhone, String buildingName, String apartmentName, String roomNumber, String details, String actor, String timestamp) {
+            this.id = id;
+            this.activityType = activityType;
+            this.residentName = residentName;
+            this.residentEmail = residentEmail;
+            this.residentPhone = residentPhone;
+            this.buildingName = buildingName;
+            this.apartmentName = apartmentName;
+            this.roomNumber = roomNumber;
+            this.details = details;
+            this.actor = actor;
+            this.timestamp = timestamp;
+        }
+
+        public String getId() { return id; }
+        public void setId(String id) { this.id = id; }
+
+        public String getActivityType() { return activityType; }
+        public void setActivityType(String activityType) { this.activityType = activityType; }
+
+        public String getResidentName() { return residentName; }
+        public void setResidentName(String residentName) { this.residentName = residentName; }
+
+        public String getResidentEmail() { return residentEmail; }
+        public void setResidentEmail(String residentEmail) { this.residentEmail = residentEmail; }
+
+        public String getResidentPhone() { return residentPhone; }
+        public void setResidentPhone(String residentPhone) { this.residentPhone = residentPhone; }
+
+        public String getBuildingName() { return buildingName; }
+        public void setBuildingName(String buildingName) { this.buildingName = buildingName; }
+
+        public String getApartmentName() { return apartmentName; }
+        public void setApartmentName(String apartmentName) { this.apartmentName = apartmentName; }
+
+        public String getRoomNumber() { return roomNumber; }
+        public void setRoomNumber(String roomNumber) { this.roomNumber = roomNumber; }
+
+        public String getDetails() { return details; }
+        public void setDetails(String details) { this.details = details; }
+
+        public String getActor() { return actor; }
+        public void setActor(String actor) { this.actor = actor; }
+
+        public String getTimestamp() { return timestamp; }
+        public void setTimestamp(String timestamp) { this.timestamp = timestamp; }
+    }
 }
+

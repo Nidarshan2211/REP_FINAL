@@ -56,10 +56,8 @@ public class SecurityConfig {
                 .authorizeHttpRequests(auth -> auth
                         .requestMatchers(
                                 "/auth/**",
-                                "/apartments/available",
-                                "/api/apartments/available",
-                                "/apartments/owners/**",
-                                "/api/apartments/owners/**",
+                                "/apartments/**",
+                                "/api/apartments/**",
                                 "/api/residents/invitations/validate",
                                 "/api/residents/invitations/accept",
                                 "/h2-console/**",

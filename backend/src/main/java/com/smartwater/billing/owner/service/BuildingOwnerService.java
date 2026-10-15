@@ -23,11 +23,20 @@ import com.smartwater.billing.resident.repository.*;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.LocalDateTime;
+import java.util.ArrayList;
 import java.util.List;
+import java.util.Set;
+import java.util.HashSet;
 import java.util.stream.Collectors;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import com.smartwater.billing.common.dto.DashboardDTOs.ResidentHistoryItemDTO;
 
 @Service
 public class BuildingOwnerService {
+
+    private static final Logger log = LoggerFactory.getLogger(BuildingOwnerService.class);
 
     @PersistenceContext
     private EntityManager entityManager;
@@ -226,4 +235,215 @@ public class BuildingOwnerService {
                 .createdAt(building.getCreatedAt())
                 .build();
     }
+
+    @Transactional(readOnly = true)
+    @SuppressWarnings("unchecked")
+    public List<ResidentHistoryItemDTO> getResidentHistory(String ownerEmail) {
+        User user = userRepository.findByEmail(ownerEmail)
+                .orElseThrow(() -> new ResourceNotFoundException("User not found with email: " + ownerEmail));
+
+        Long ownerId = null;
+        String ownerDisplayName = user.getName();
+        if (user.getRole() != User.Role.SUPER_ADMIN) {
+            BuildingOwner owner = ownerRepository.findByUser(user)
+                    .orElseThrow(() -> new ResourceNotFoundException("Owner profile not found for user: " + ownerEmail));
+            ownerId = owner.getOwnerId();
+            if (owner.getName() != null) ownerDisplayName = owner.getName();
+        }
+
+        List<ResidentHistoryItemDTO> list = new ArrayList<>();
+        Set<String> seenKeys = new HashSet<>();
+
+        // 1. Audit logs from resident_history table (most accurate chronological records)
+        try {
+            String queryStr = (ownerId != null)
+                    ? "SELECT id, building_name, apartment_name, room_number, resident_name, resident_email, resident_phone, activity_type, details, actor, timestamp " +
+                      "FROM resident_history WHERE owner_id = :oId ORDER BY timestamp DESC"
+                    : "SELECT id, building_name, apartment_name, room_number, resident_name, resident_email, resident_phone, activity_type, details, actor, timestamp " +
+                      "FROM resident_history ORDER BY timestamp DESC";
+
+            var nativeQuery = entityManager.createNativeQuery(queryStr);
+            if (ownerId != null) {
+                nativeQuery.setParameter("oId", ownerId);
+            }
+            List<Object[]> rows = nativeQuery.getResultList();
+
+            for (Object[] r : rows) {
+                Long id = r[0] != null ? ((Number) r[0]).longValue() : 0L;
+                String bldgName = r[1] != null ? r[1].toString() : "Building";
+                String aptName = r[2] != null ? r[2].toString() : "Apartment";
+                String room = r[3] != null ? r[3].toString() : "";
+                String resName = r[4] != null ? r[4].toString() : "Resident";
+                String resEmail = r[5] != null ? r[5].toString() : "";
+                String resPhone = r[6] != null ? r[6].toString() : "";
+                String type = r[7] != null ? r[7].toString() : "JOINED";
+                String details = r[8] != null ? r[8].toString() : "";
+                String actor = r[9] != null ? r[9].toString() : "";
+                String ts = r[10] != null ? r[10].toString() : LocalDateTime.now().toString();
+
+                String dedupKey = type + "_" + room + "_" + (resEmail.isEmpty() ? resName : resEmail);
+                seenKeys.add(dedupKey);
+
+                list.add(new ResidentHistoryItemDTO(
+                        "HIST-" + id,
+                        type,
+                        resName,
+                        resEmail,
+                        resPhone,
+                        bldgName,
+                        aptName,
+                        room,
+                        details,
+                        actor,
+                        ts
+                ));
+            }
+        } catch (Exception e) {
+            log.error("Error reading resident_history: {}", e.getMessage(), e);
+        }
+
+        // 2. Fetch from apartment_occupancies for this owner's buildings (synthesize any missing history)
+        final Long finalOwnerId = ownerId;
+        List<ApartmentOccupancy> occupancies = occupancyRepository.findAll().stream()
+                .filter(o -> o.getApartment() != null
+                        && o.getApartment().getBuilding() != null
+                        && (finalOwnerId == null || (o.getApartment().getBuilding().getOwner() != null && o.getApartment().getBuilding().getOwner().getOwnerId().equals(finalOwnerId))))
+                .collect(Collectors.toList());
+
+        for (ApartmentOccupancy occ : occupancies) {
+            String resName = occ.getResident() != null ? occ.getResident().getName() : "Resident";
+            String resEmail = occ.getResident() != null ? occ.getResident().getEmail() : "";
+            String resPhone = occ.getResident() != null ? occ.getResident().getPhone() : "";
+            String bldgName = occ.getApartment().getBuilding().getBuildingName();
+            String aptName = occ.getApartment().getApartmentName();
+            String room = occ.getApartment().getRoomNumber();
+
+            // 2a. Move-in / Come to apartment
+            String inDedupKey = "JOINED_" + room + "_" + (resEmail.isEmpty() ? resName : resEmail);
+            if (!seenKeys.contains(inDedupKey)) {
+                seenKeys.add(inDedupKey);
+                String inTs = occ.getStartDate() != null ? occ.getStartDate().toString() : (occ.getCreatedAt() != null ? occ.getCreatedAt().toString() : LocalDateTime.now().toString());
+                list.add(new ResidentHistoryItemDTO(
+                        "OCC-IN-" + occ.getOccupancyId(),
+                        "JOINED",
+                        resName,
+                        resEmail,
+                        resPhone,
+                        bldgName,
+                        aptName,
+                        room,
+                        "Resident moved in and occupied " + aptName + " (" + bldgName + ")",
+                        resName,
+                        inTs
+                ));
+            }
+
+            // 2b. Move-out / Leave apartment
+            if (occ.getStatus() == ApartmentOccupancy.OccupancyStatus.ENDED || occ.getEndDate() != null) {
+                String outDedupKey = "LEFT_" + room + "_" + (resEmail.isEmpty() ? resName : resEmail);
+                if (!seenKeys.contains(outDedupKey)) {
+                    seenKeys.add(outDedupKey);
+                    String outTs = occ.getEndDate() != null ? occ.getEndDate().toString() : LocalDateTime.now().toString();
+                    String reason = occ.getMoveOutReason() != null ? occ.getMoveOutReason() : "Vacated apartment";
+                    String actor = reason.toLowerCase().contains("owner") ? ownerDisplayName : resName;
+                    list.add(new ResidentHistoryItemDTO(
+                            "OCC-OUT-" + occ.getOccupancyId(),
+                            "LEFT",
+                            resName,
+                            resEmail,
+                            resPhone,
+                            bldgName,
+                            aptName,
+                            room,
+                            "Resident left " + aptName + ". Note: " + reason,
+                            actor,
+                            outTs
+                    ));
+                }
+            }
+        }
+
+        // 3. Add legacy residents who don't have an active ApartmentOccupancy entry
+        List<Resident> ownerResidents = (ownerId != null)
+                ? residentRepository.findByBuildingOwnerOwnerId(ownerId)
+                : residentRepository.findAll();
+
+        for (Resident res : ownerResidents) {
+            String room = res.getApartmentNumber();
+            if (room != null && !room.startsWith("FORMER-") && !room.equals("Vacated") && !room.equals("PENDING") && !room.equals("Removed")) {
+                String inDedupKey = "JOINED_" + room + "_" + (res.getEmail() != null ? res.getEmail() : res.getName());
+                if (!seenKeys.contains(inDedupKey)) {
+                    seenKeys.add(inDedupKey);
+                    list.add(new ResidentHistoryItemDTO(
+                            "RES-IN-" + res.getResidentId(),
+                            "JOINED",
+                            res.getName(),
+                            res.getEmail(),
+                            res.getPhone(),
+                            res.getBuilding() != null ? res.getBuilding().getBuildingName() : "Building",
+                            "Flat " + room,
+                            room,
+                            "Resident moved in and occupied Flat " + room,
+                            res.getName(),
+                            res.getCreatedAt() != null ? res.getCreatedAt().toString() : LocalDateTime.now().toString()
+                    ));
+                }
+            }
+        }
+
+        // Sort by timestamp descending
+        list.sort((a, b) -> {
+            if (a.getTimestamp() == null) return 1;
+            if (b.getTimestamp() == null) return -1;
+            return b.getTimestamp().compareTo(a.getTimestamp());
+        });
+
+        return list;
+    }
+
+    @Transactional
+    public void leaveApplication(String email) {
+        BuildingOwner owner = getOwnerByUserEmail(email);
+        Long ownerId = owner.getOwnerId();
+        String ownerName = owner.getUser() != null ? owner.getUser().getName() : owner.getName();
+        String phone = owner.getPhone() != null ? owner.getPhone() : "";
+
+        // 1. Audit log in owner_history so Super Admin history permanently tracks the owner's departure
+        try {
+            entityManager.createNativeQuery(
+                    "INSERT INTO owner_history (owner_id, owner_name, email, phone, event_type, details, actor, timestamp) " +
+                    "VALUES (:ownerId, :name, :email, :phone, 'REMOVED', 'Owner voluntarily left the application and closed account.', :actor, NOW())"
+            ).setParameter("ownerId", ownerId)
+             .setParameter("name", ownerName)
+             .setParameter("email", email)
+             .setParameter("phone", phone)
+             .setParameter("actor", ownerName + " (Self)")
+             .executeUpdate();
+        } catch (Exception ignored) {}
+
+        // 2. Cascade delete all buildings owned by this owner
+        List<Building> buildings = buildingRepository.findByOwner(owner);
+        for (Building b : buildings) {
+            deleteBuilding(email, b.getBuildingId());
+        }
+
+        // 3. Delete resident invitations issued by this owner
+        entityManager.createNativeQuery("DELETE FROM resident_invitations WHERE invited_by_id = :ownerId")
+                .setParameter("ownerId", ownerId)
+                .executeUpdate();
+
+        // 4. Delete building owner profile
+        Long userId = owner.getUser() != null ? owner.getUser().getUserId() : null;
+        entityManager.createNativeQuery("DELETE FROM building_owners WHERE owner_id = :ownerId")
+                .setParameter("ownerId", ownerId)
+                .executeUpdate();
+
+        // 5. Delete user account
+        if (userId != null) {
+            entityManager.createNativeQuery("DELETE FROM users WHERE user_id = :userId AND role != 'SUPER_ADMIN'")
+                    .setParameter("userId", userId)
+                    .executeUpdate();
+        }
+    }
 }
+

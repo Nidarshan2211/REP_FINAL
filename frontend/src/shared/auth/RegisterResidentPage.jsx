@@ -24,29 +24,78 @@ export default function RegisterResidentPage() {
   const [loading, setLoading] = useState(false);
   const [loadingApts, setLoadingApts] = useState(false);
 
-  // Load available apartments on mount
+  // Load available buildings and apartments on mount
   useEffect(() => {
-    API.get('/apartments/available')
-      .then(res => {
-        const apts = res.data || [];
+    setLoadingApts(true);
+    Promise.all([
+      API.get('/apartments/buildings').catch(() => null),
+      API.get('/apartments/available').catch(() => null)
+    ])
+      .then(([bldgRes, aptRes]) => {
+        const apts = aptRes?.data || [];
         setAvailableApartments(apts);
-        // Extract distinct buildings
-        const bMap = new Map();
-        apts.forEach(a => {
-          if (a.buildingId && !bMap.has(a.buildingId)) {
-            bMap.set(a.buildingId, { buildingId: a.buildingId, buildingName: a.buildingName });
-          }
-        });
-        const bList = Array.from(bMap.values());
+
+        let bList = [];
+        if (bldgRes?.data && Array.isArray(bldgRes.data) && bldgRes.data.length > 0) {
+          bList = bldgRes.data;
+        } else {
+          // Fallback: extract distinct buildings from available apartments
+          const bMap = new Map();
+          apts.forEach(a => {
+            if (a.buildingId && !bMap.has(a.buildingId)) {
+              bMap.set(a.buildingId, {
+                buildingId: a.buildingId,
+                buildingName: a.buildingName,
+                location: a.location
+              });
+            }
+          });
+          bList = Array.from(bMap.values());
+        }
+
         setBuildingsList(bList);
         if (bList.length > 0) {
-          setSelectedBuildingId(bList[0].buildingId);
+          const initialBldgId = String(bList[0].buildingId);
+          setSelectedBuildingId(initialBldgId);
+          const hasUnits = apts.some(a => a.buildingId === parseInt(initialBldgId));
+          if (!hasUnits) {
+            fetchApartmentsForBuilding(initialBldgId);
+          }
         }
       })
       .catch(err => {
-        console.warn('Could not load available apartments for self-registration:', err);
+        console.warn('Could not load properties/apartments for self-registration:', err);
+      })
+      .finally(() => {
+        setLoadingApts(false);
       });
   }, []);
+
+  const fetchApartmentsForBuilding = async (bId) => {
+    if (!bId) return;
+    try {
+      setLoadingApts(true);
+      const res = await API.get('/apartments/available', { params: { buildingId: bId } });
+      const newApts = res.data || [];
+      setAvailableApartments(prev => {
+        const others = prev.filter(a => a.buildingId !== parseInt(bId));
+        return [...others, ...newApts];
+      });
+    } catch (err) {
+      console.warn('Failed to load apartments for building', bId, err);
+    } finally {
+      setLoadingApts(false);
+    }
+  };
+
+  const handleBuildingChange = (e) => {
+    const bId = e.target.value;
+    setSelectedBuildingId(bId);
+    setFormData(prev => ({ ...prev, apartmentId: '' }));
+    if (bId) {
+      fetchApartmentsForBuilding(bId);
+    }
+  };
 
   const handleChange = (e) => {
     setFormData(prev => ({ ...prev, [e.target.name]: e.target.value }));
@@ -258,14 +307,16 @@ export default function RegisterResidentPage() {
                     <select
                       className="form-select form-select-sm"
                       value={selectedBuildingId}
-                      onChange={(e) => {
-                        setSelectedBuildingId(e.target.value);
-                        setFormData(prev => ({ ...prev, apartmentId: '' }));
-                      }}
+                      onChange={handleBuildingChange}
+                      disabled={loadingApts && buildingsList.length === 0}
                     >
-                      {buildingsList.length === 0 && <option value="">No buildings found</option>}
+                      {buildingsList.length === 0 && (
+                        <option value="">{loadingApts ? 'Loading buildings...' : 'No buildings found'}</option>
+                      )}
                       {buildingsList.map(b => (
-                        <option key={b.buildingId} value={b.buildingId}>{b.buildingName}</option>
+                        <option key={b.buildingId} value={b.buildingId}>
+                          {b.buildingName} {b.location ? `(${b.location})` : ''} {b.ownerName ? `• Owner: ${b.ownerName}` : ''}
+                        </option>
                       ))}
                     </select>
                   </div>
@@ -278,6 +329,7 @@ export default function RegisterResidentPage() {
                       value={formData.apartmentId}
                       onChange={handleChange}
                       required={claimNow}
+                      disabled={loadingApts}
                     >
                       <option value="">-- Choose Unit --</option>
                       {filteredApartments.map(a => (
@@ -286,7 +338,13 @@ export default function RegisterResidentPage() {
                         </option>
                       ))}
                     </select>
-                    {filteredApartments.length === 0 && (
+                    {loadingApts && (
+                      <small className="text-muted d-block mt-1 fs-8">
+                        <span className="spinner-border spinner-border-sm me-1" style={{ width: '0.75rem', height: '0.75rem' }}></span>
+                        Loading available units...
+                      </small>
+                    )}
+                    {!loadingApts && selectedBuildingId && filteredApartments.length === 0 && (
                       <small className="text-danger d-block mt-1 fs-8">No vacant units available in this building.</small>
                     )}
                   </div>

@@ -244,6 +244,30 @@ public class ApartmentService {
                 resident.setApartmentNumber("FORMER-" + apt.getRoomNumber());
                 resident.setAccountStatus(Resident.AccountStatus.INACTIVE);
                 residentRepository.save(resident);
+
+                // Audit log in resident_history
+                try {
+                    BuildingOwner bOwner = apt.getBuilding() != null ? apt.getBuilding().getOwner() : null;
+                    if (bOwner != null) {
+                        entityManager.createNativeQuery(
+                                "INSERT INTO resident_history (owner_id, building_id, building_name, apartment_id, apartment_name, room_number, resident_id, resident_name, resident_email, resident_phone, activity_type, details, actor, timestamp) " +
+                                "VALUES (:oId, :bId, :bName, :aId, :aName, :room, :resId, :resName, :resEmail, :resPhone, 'LEFT', :details, :actor, NOW())"
+                        )
+                        .setParameter("oId", bOwner.getOwnerId())
+                        .setParameter("bId", apt.getBuilding().getBuildingId())
+                        .setParameter("bName", apt.getBuilding().getBuildingName())
+                        .setParameter("aId", apt.getApartmentId())
+                        .setParameter("aName", apt.getApartmentName())
+                        .setParameter("room", apt.getRoomNumber())
+                        .setParameter("resId", resident.getResidentId())
+                        .setParameter("resName", resident.getName())
+                        .setParameter("resEmail", resident.getEmail())
+                        .setParameter("resPhone", resident.getPhone())
+                        .setParameter("details", "Apartment vacated by building owner")
+                        .setParameter("actor", bOwner.getUser() != null ? bOwner.getUser().getName() : "Building Owner")
+                        .executeUpdate();
+                    }
+                } catch (Exception ignored) {}
             }
         }
 
@@ -336,7 +360,10 @@ public class ApartmentService {
         apartment = apartmentRepository.save(apartment);
 
         // Ensure physical water meter fixture exists for this unit
-        String mNum = "WM-" + building.getBuildingNumber() + "-" + room;
+        String mNum = (request.getMeterNumber() != null && !request.getMeterNumber().trim().isEmpty())
+                ? request.getMeterNumber().trim()
+                : "WM-" + building.getBuildingNumber() + "-" + room;
+
         WaterMeter meter = waterMeterRepository.findByMeterNumber(mNum).orElse(null);
         if (meter == null) {
             meter = WaterMeter.builder()
@@ -347,8 +374,9 @@ public class ApartmentService {
                     .status(WaterMeter.MeterStatus.ACTIVE)
                     .build();
             waterMeterRepository.save(meter);
-        } else if (meter.getApartment() == null) {
+        } else {
             meter.setApartment(apartment);
+            meter.setBuilding(building);
             waterMeterRepository.save(meter);
         }
 
@@ -359,8 +387,20 @@ public class ApartmentService {
     public List<ApartmentResponse> batchCreateApartments(String ownerEmail, BatchCreateApartmentsRequest request) {
         Building building = getBuildingAndVerifyOwner(ownerEmail, request.getBuildingId());
 
+        // Build room to custom meter map if provided
+        Map<String, String> roomToMeterMap = new HashMap<>();
+        if (request.getRoomMeters() != null) {
+            for (RoomMeterConfig rmc : request.getRoomMeters()) {
+                if (rmc.getRoomNumber() != null && rmc.getMeterNumber() != null && !rmc.getMeterNumber().trim().isEmpty()) {
+                    roomToMeterMap.put(rmc.getRoomNumber().trim(), rmc.getMeterNumber().trim());
+                }
+            }
+        }
+
         List<ApartmentResponse> result = new ArrayList<>();
-        for (String room : request.getRoomNumbers()) {
+        List<String> rooms = request.getRoomNumbers();
+        for (int i = 0; i < rooms.size(); i++) {
+            String room = rooms.get(i);
             String trimmedRoom = room.trim();
             if (trimmedRoom.isEmpty() || apartmentRepository.existsByBuildingBuildingIdAndRoomNumber(building.getBuildingId(), trimmedRoom)) {
                 continue;
@@ -376,8 +416,19 @@ public class ApartmentService {
 
             apartment = apartmentRepository.save(apartment);
 
-            // Ensure meter fixture exists
-            String mNum = "WM-" + building.getBuildingNumber() + "-" + trimmedRoom;
+            // Determine custom or prefix-based meter number
+            String mNum;
+            if (roomToMeterMap.containsKey(trimmedRoom)) {
+                mNum = roomToMeterMap.get(trimmedRoom);
+            } else if (request.getMeterNumbers() != null && i < request.getMeterNumbers().size() && request.getMeterNumbers().get(i) != null && !request.getMeterNumbers().get(i).trim().isEmpty()) {
+                mNum = request.getMeterNumbers().get(i).trim();
+            } else if (request.getMeterPrefix() != null && !request.getMeterPrefix().trim().isEmpty()) {
+                String prefix = request.getMeterPrefix().trim();
+                mNum = prefix.endsWith("-") ? prefix + trimmedRoom : prefix + "-" + trimmedRoom;
+            } else {
+                mNum = "WM-" + building.getBuildingNumber() + "-" + trimmedRoom;
+            }
+
             WaterMeter meter = waterMeterRepository.findByMeterNumber(mNum).orElse(null);
             if (meter == null) {
                 meter = WaterMeter.builder()
@@ -388,8 +439,9 @@ public class ApartmentService {
                         .status(WaterMeter.MeterStatus.ACTIVE)
                         .build();
                 waterMeterRepository.save(meter);
-            } else if (meter.getApartment() == null) {
+            } else {
                 meter.setApartment(apartment);
+                meter.setBuilding(building);
                 waterMeterRepository.save(meter);
             }
 
@@ -397,6 +449,62 @@ public class ApartmentService {
         }
 
         return result;
+    }
+
+    @Transactional
+    public ApartmentResponse updateApartmentMeter(String ownerEmail, Long apartmentId, String newMeterNumber) {
+        Apartment apt = apartmentRepository.findById(apartmentId)
+                .orElseThrow(() -> new ResourceNotFoundException("Apartment not found with id: " + apartmentId));
+        Building building = getBuildingAndVerifyOwner(ownerEmail, apt.getBuilding().getBuildingId());
+
+        if (newMeterNumber == null || newMeterNumber.trim().isEmpty()) {
+            throw new BadRequestException("Meter number cannot be empty.");
+        }
+        String trimmedMeterNumber = newMeterNumber.trim();
+
+        // Check if meter already exists with this meter number
+        Optional<WaterMeter> existingMeterWithNum = waterMeterRepository.findByMeterNumber(trimmedMeterNumber);
+
+        // Find current meter for this apartment
+        WaterMeter currentMeter = waterMeterRepository.findByBuildingBuildingId(building.getBuildingId()).stream()
+                .filter(m -> m.getApartment() != null && m.getApartment().getApartmentId().equals(apt.getApartmentId()))
+                .findFirst()
+                .orElse(null);
+
+        if (existingMeterWithNum.isPresent()) {
+            WaterMeter otherMeter = existingMeterWithNum.get();
+            if (currentMeter != null && !otherMeter.getMeterId().equals(currentMeter.getMeterId())) {
+                if (otherMeter.getApartment() != null && !otherMeter.getApartment().getApartmentId().equals(apt.getApartmentId())) {
+                    throw new BadRequestException("Meter number '" + trimmedMeterNumber + "' is already assigned to Unit " + otherMeter.getApartment().getRoomNumber());
+                }
+                currentMeter.setApartment(null);
+                waterMeterRepository.save(currentMeter);
+                otherMeter.setApartment(apt);
+                waterMeterRepository.save(otherMeter);
+            } else if (currentMeter == null) {
+                if (otherMeter.getApartment() != null && !otherMeter.getApartment().getApartmentId().equals(apt.getApartmentId())) {
+                    throw new BadRequestException("Meter number '" + trimmedMeterNumber + "' is already assigned to Unit " + otherMeter.getApartment().getRoomNumber());
+                }
+                otherMeter.setApartment(apt);
+                waterMeterRepository.save(otherMeter);
+            }
+        } else {
+            if (currentMeter != null) {
+                currentMeter.setMeterNumber(trimmedMeterNumber);
+                waterMeterRepository.save(currentMeter);
+            } else {
+                WaterMeter newMeter = WaterMeter.builder()
+                        .building(building)
+                        .apartment(apt)
+                        .meterNumber(trimmedMeterNumber)
+                        .installationDate(LocalDate.now())
+                        .status(WaterMeter.MeterStatus.ACTIVE)
+                        .build();
+                waterMeterRepository.save(newMeter);
+            }
+        }
+
+        return enrichApartmentResponse(apt);
     }
 
     @Transactional
@@ -484,26 +592,67 @@ public class ApartmentService {
                 .collect(Collectors.toList());
     }
 
-    @Transactional(readOnly = true)
+    @Transactional
     public List<PublicBuildingResponse> getOwnerBuildings(Long ownerId) {
         List<Building> buildings = buildingRepository.findByOwnerOwnerId(ownerId);
+        for (Building b : buildings) {
+            ensureDefaultApartmentsForBuilding(b);
+        }
         return buildings.stream()
                 .map(b -> {
                     int vacantCount = (int) getAvailableApartments(b.getBuildingId(), null).size();
+                    String ownerName = (b.getOwner() != null && b.getOwner().getUser() != null)
+                            ? b.getOwner().getUser().getName()
+                            : (b.getOwner() != null && b.getOwner().getName() != null ? b.getOwner().getName() : "Owner");
                     return new PublicBuildingResponse(
                             b.getBuildingId(),
                             b.getBuildingName(),
                             b.getBuildingNumber(),
                             b.getLocation(),
                             b.getTotalFlats(),
-                            vacantCount
+                            vacantCount,
+                            ownerName
                     );
                 })
                 .collect(Collectors.toList());
     }
 
-    @Transactional(readOnly = true)
+    @Transactional
+    public List<PublicBuildingResponse> getAllPublicBuildings() {
+        List<Building> buildings = buildingRepository.findAll();
+        for (Building b : buildings) {
+            ensureDefaultApartmentsForBuilding(b);
+        }
+        return buildings.stream()
+                .map(b -> {
+                    int vacantCount = (int) getAvailableApartments(b.getBuildingId(), null).size();
+                    String ownerName = (b.getOwner() != null && b.getOwner().getUser() != null)
+                            ? b.getOwner().getUser().getName()
+                            : (b.getOwner() != null && b.getOwner().getName() != null ? b.getOwner().getName() : "Owner");
+                    return new PublicBuildingResponse(
+                            b.getBuildingId(),
+                            b.getBuildingName(),
+                            b.getBuildingNumber(),
+                            b.getLocation(),
+                            b.getTotalFlats(),
+                            vacantCount,
+                            ownerName
+                    );
+                })
+                .collect(Collectors.toList());
+    }
+
+    @Transactional
     public List<AvailableApartmentResponse> getAvailableApartments(Long buildingId, Integer floorNumber) {
+        if (buildingId != null) {
+            buildingRepository.findById(buildingId).ifPresent(this::ensureDefaultApartmentsForBuilding);
+        } else {
+            List<Building> allBuildings = buildingRepository.findAll();
+            for (Building b : allBuildings) {
+                ensureDefaultApartmentsForBuilding(b);
+            }
+        }
+
         List<Apartment> apartments;
         if (buildingId != null && floorNumber != null) {
             apartments = apartmentRepository.findByBuildingAndFloor(buildingId, floorNumber);
@@ -562,6 +711,7 @@ public class ApartmentService {
                     .roomNumber(apt.getRoomNumber())
                     .unitType(apt.getUnitType())
                     .description(apt.getDescription())
+                    .meterId(meter != null ? meter.getMeterId() : null)
                     .meterNumber(meter != null ? meter.getMeterNumber() : "N/A")
                     .build());
         }
@@ -639,7 +789,30 @@ public class ApartmentService {
                 .findFirst()
                 .orElse(null);
 
+        // Ensure meter fixture exists and is linked
+        if (meter == null) {
+            String mNum = "WM-" + apt.getBuilding().getBuildingNumber() + "-" + apt.getRoomNumber();
+            meter = waterMeterRepository.findByMeterNumber(mNum).orElse(null);
+            if (meter == null) {
+                meter = WaterMeter.builder()
+                        .building(apt.getBuilding())
+                        .apartment(apt)
+                        .meterNumber(mNum)
+                        .installationDate(LocalDate.now())
+                        .status(WaterMeter.MeterStatus.ACTIVE)
+                        .build();
+                meter = waterMeterRepository.save(meter);
+            } else {
+                meter.setApartment(apt);
+                meter = waterMeterRepository.save(meter);
+            }
+        } else if (meter.getApartment() == null) {
+            meter.setApartment(apt);
+            meter = waterMeterRepository.save(meter);
+        }
+
         if (meter != null) {
+            builder.meterId(meter.getMeterId());
             builder.meterNumber(meter.getMeterNumber());
         }
 

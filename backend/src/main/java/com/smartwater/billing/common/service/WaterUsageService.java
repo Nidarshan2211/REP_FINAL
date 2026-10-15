@@ -135,8 +135,35 @@ public class WaterUsageService {
     }
 
     public List<UsageResponse> getOwnerUsageRecords(String ownerEmail) {
+        return getOwnerUsageRecords(ownerEmail, null, null, null, null, null);
+    }
+
+    public List<UsageResponse> getOwnerUsageRecords(String ownerEmail, Long buildingId, String apartmentNumber, Long billingCycleId, Integer month, Integer year) {
         BuildingOwner owner = ownerService.getOwnerByUserEmail(ownerEmail);
         return usageRepository.findByOwnerId(owner.getOwnerId()).stream()
+                .filter(u -> buildingId == null || (u.getMeter() != null && u.getMeter().getBuilding() != null && buildingId.equals(u.getMeter().getBuilding().getBuildingId())))
+                .filter(u -> billingCycleId == null || (u.getBillingCycle() != null && billingCycleId.equals(u.getBillingCycle().getId())))
+                .filter(u -> month == null || (u.getMonth() != null && month.equals(u.getMonth())))
+                .filter(u -> year == null || (u.getYear() != null && year.equals(u.getYear())))
+                .filter(u -> {
+                    if (apartmentNumber == null || apartmentNumber.isBlank() || "ALL".equalsIgnoreCase(apartmentNumber)) return true;
+                    String apt = null;
+                    if (u.getMeter() != null) {
+                        if (u.getMeter().getApartment() != null && u.getMeter().getApartment().getRoomNumber() != null) {
+                            apt = u.getMeter().getApartment().getRoomNumber();
+                        }
+                        if (apt == null && u.getMeter().getResident() != null && u.getMeter().getResident().getApartmentNumber() != null) {
+                            apt = u.getMeter().getResident().getApartmentNumber();
+                        }
+                        if (apt == null && u.getMeter().getMeterNumber() != null) {
+                            String[] parts = u.getMeter().getMeterNumber().split("-");
+                            if (parts.length > 0) {
+                                apt = parts[parts.length - 1];
+                            }
+                        }
+                    }
+                    return apartmentNumber.trim().equalsIgnoreCase(apt != null ? apt.trim() : "");
+                })
                 .map(this::convertToUsageResponse)
                 .collect(Collectors.toList());
     }
@@ -194,17 +221,48 @@ public class WaterUsageService {
     }
 
     private UsageResponse convertToUsageResponse(WaterUsage usage) {
-        String residentName = usage.getMeter().getResident() != null ? usage.getMeter().getResident().getName() : "Unassigned";
-        Long residentId = usage.getMeter().getResident() != null ? usage.getMeter().getResident().getResidentId() : null;
+        String residentName = (usage.getMeter() != null && usage.getMeter().getResident() != null)
+                ? usage.getMeter().getResident().getName() : "Unassigned";
+        Long residentId = (usage.getMeter() != null && usage.getMeter().getResident() != null)
+                ? usage.getMeter().getResident().getResidentId() : null;
         Long cycleId = usage.getBillingCycle() != null ? usage.getBillingCycle().getId() : null;
+        String cycleName = usage.getBillingCycle() != null 
+                ? "Cycle #" + usage.getBillingCycle().getId() + " (" + usage.getBillingCycle().getStartDate() + " to " + usage.getBillingCycle().getEndDate() + ")"
+                : null;
+
+        String apartmentNumber = null;
+        Long buildingId = null;
+        String buildingName = null;
+        if (usage.getMeter() != null) {
+            if (usage.getMeter().getApartment() != null && usage.getMeter().getApartment().getRoomNumber() != null) {
+                apartmentNumber = usage.getMeter().getApartment().getRoomNumber();
+            }
+            if (apartmentNumber == null && usage.getMeter().getResident() != null && usage.getMeter().getResident().getApartmentNumber() != null) {
+                apartmentNumber = usage.getMeter().getResident().getApartmentNumber();
+            }
+            if (apartmentNumber == null && usage.getMeter().getMeterNumber() != null) {
+                String[] parts = usage.getMeter().getMeterNumber().split("-");
+                if (parts.length > 0) {
+                    apartmentNumber = parts[parts.length - 1];
+                }
+            }
+            if (usage.getMeter().getBuilding() != null) {
+                buildingId = usage.getMeter().getBuilding().getBuildingId();
+                buildingName = usage.getMeter().getBuilding().getBuildingName();
+            }
+        }
 
         return UsageResponse.builder()
                 .usageId(usage.getUsageId())
-                .meterId(usage.getMeter().getMeterId())
-                .meterNumber(usage.getMeter().getMeterNumber())
+                .meterId(usage.getMeter() != null ? usage.getMeter().getMeterId() : null)
+                .meterNumber(usage.getMeter() != null ? usage.getMeter().getMeterNumber() : "N/A")
+                .buildingId(buildingId)
+                .buildingName(buildingName)
+                .apartmentNumber(apartmentNumber)
                 .residentId(residentId)
                 .residentName(residentName)
                 .billingCycleId(cycleId)
+                .cycleName(cycleName)
                 .month(usage.getMonth())
                 .year(usage.getYear())
                 .previousReading(usage.getPreviousReading())

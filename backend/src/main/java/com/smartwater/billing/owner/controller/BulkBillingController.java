@@ -56,13 +56,15 @@ public class BulkBillingController {
                 .body(csvData);
     }
 
-    @PostMapping(value = "/validate", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    @PostMapping("/validate")
     public ResponseEntity<BulkValidationResponse> validateCsv(
             Authentication authentication,
-            @RequestParam("buildingId") Long buildingId,
-            @RequestParam("billingCycleId") Long cycleId,
+            @RequestParam("buildingId") String rawBuildingId,
+            @RequestParam("billingCycleId") String rawCycleId,
             @RequestParam("file") MultipartFile file
     ) {
+        Long buildingId = parseFirstLong(rawBuildingId);
+        Long cycleId = parseFirstLong(rawCycleId);
         return ResponseEntity.ok(bulkBillingService.validateCsv(authentication.getName(), buildingId, cycleId, file));
     }
 
@@ -81,23 +83,35 @@ public class BulkBillingController {
                 .body(csvData);
     }
 
-    @PostMapping(value = "/import-readings", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    @PostMapping("/import-readings")
     public ResponseEntity<BulkImportResponse> importReadings(
             Authentication authentication,
-            @RequestParam("buildingId") Long buildingId,
-            @RequestParam("billingCycleId") Long cycleId,
+            @RequestParam("buildingId") String rawBuildingId,
+            @RequestParam("billingCycleId") String rawCycleId,
             @RequestParam("file") MultipartFile file
     ) {
+        Long buildingId = parseFirstLong(rawBuildingId);
+        Long cycleId = parseFirstLong(rawCycleId);
         return ResponseEntity.ok(bulkBillingService.importReadings(authentication.getName(), buildingId, cycleId, file));
     }
 
-    @PostMapping(value = "/generate", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    @PostMapping("/generate")
     public ResponseEntity<BulkImportResponse> generateBills(
             Authentication authentication,
-            @RequestParam("buildingId") Long buildingId,
-            @RequestParam("billingCycleId") Long cycleId,
+            @RequestParam("buildingId") String rawBuildingId,
+            @RequestParam("billingCycleId") String rawCycleId,
             @RequestParam("file") MultipartFile file
     ) {
+        Long buildingId = parseFirstLong(rawBuildingId);
+        Long cycleId = parseFirstLong(rawCycleId);
         return ResponseEntity.ok(bulkBillingService.generateBills(authentication.getName(), buildingId, cycleId, file));
+    }
+
+    private Long parseFirstLong(String val) {
+        if (val == null || val.isBlank()) return null;
+        if (val.contains(",")) {
+            val = val.split(",")[0].trim();
+        }
+        return Long.parseLong(val.trim());
     }
 }

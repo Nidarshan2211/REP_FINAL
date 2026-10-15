@@ -1,324 +1,417 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
+import { useNavigate } from 'react-router-dom';
 import API from '../../shared/services/api';
 import LoadingSpinner from '../../shared/components/LoadingSpinner';
 
 export default function OwnerUsagePage() {
+  const navigate = useNavigate();
+
   const [usageRecords, setUsageRecords] = useState([]);
-  const [meters, setMeters] = useState([]);
-  const [cycles, setCycles] = useState([]);
   const [buildings, setBuildings] = useState([]);
   const [selectedBuildingId, setSelectedBuildingId] = useState('');
+  const [apartments, setApartments] = useState([]);
+  const [selectedApartment, setSelectedApartment] = useState('');
+  const [cycles, setCycles] = useState([]);
+  const [selectedCycleId, setSelectedCycleId] = useState('');
+  const [searchTerm, setSearchTerm] = useState('');
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
 
-  const [showModal, setShowModal] = useState(false);
-  const [formData, setFormData] = useState({
-    meterId: '',
-    billingCycleId: '',
-    previousReading: 0,
-    currentReading: 0
-  });
-
-  // CSV Import Modal State
-  const [showCsvModal, setShowCsvModal] = useState(false);
-  const [csvCycleId, setCsvCycleId] = useState('');
-  const [csvFile, setCsvFile] = useState(null);
-  const [validatingCsv, setValidatingCsv] = useState(false);
-  const [csvValidation, setCsvValidation] = useState(null);
-  const [csvErrorBanner, setCsvErrorBanner] = useState('');
-  const [submittingCsv, setSubmittingCsv] = useState(false);
-  const [downloadingTemplate, setDownloadingTemplate] = useState(false);
-
-  // Fetch Buildings on mount
+  // 1. Fetch buildings on mount
   useEffect(() => {
     API.get('/owners/buildings')
       .then(res => {
         const bList = res.data || [];
         setBuildings(bList);
         if (bList.length > 0) {
-          setSelectedBuildingId(bList[0].buildingId);
+          setSelectedBuildingId(String(bList[0].buildingId));
         }
       })
       .catch(err => console.error('Failed to load buildings', err));
   }, []);
 
-  const fetchData = (bId) => {
-    setLoading(true);
-    Promise.all([
-      API.get('/usage/records'),
-      API.get('/usage/meters').catch(() => API.get('/owners/residents')),
-      bId ? API.get(`/api/owner/billing-cycles?buildingId=${bId}`).catch(() => API.get('/api/billing-cycles')) : Promise.resolve({ data: [] })
-    ]).then(([usageRes, meterRes, cycleRes]) => {
-      setUsageRecords(usageRes.data || []);
-      const mList = meterRes.data || [];
-      setMeters(mList);
-      const cList = cycleRes.data || [];
-      setCycles(cList);
+  // 2. Fetch cycles and apartments whenever selectedBuildingId changes
+  useEffect(() => {
+    if (!selectedBuildingId) return;
 
-      if (mList.length > 0 && !formData.meterId) {
-        const firstM = mList[0];
-        setFormData(prev => ({
-          ...prev,
-          meterId: firstM.meterId || firstM.residentId,
-          previousReading: firstM.autoPreviousReading || 0
-        }));
-      }
-      if (cList.length > 0 && !formData.billingCycleId) {
-        setFormData(prev => ({ ...prev, billingCycleId: cList[0].id }));
-      }
-    }).catch(err => console.error(err))
-      .finally(() => setLoading(false));
+    // Fetch billing cycles for this building
+    API.get(`/api/owner/billing-cycles?buildingId=${selectedBuildingId}`)
+      .catch(() => API.get('/api/billing-cycles'))
+      .then(cycleRes => {
+        setCycles(cycleRes.data || []);
+      })
+      .catch(err => console.error('Failed to load billing cycles', err));
+
+    // Fetch apartments for this building inventory
+    API.get(`/owners/buildings/${selectedBuildingId}/apartments`)
+      .then(aptRes => {
+        const aptData = aptRes.data?.apartments || aptRes.data || [];
+        const aptList = Array.isArray(aptData) ? aptData : [];
+        setApartments(aptList);
+      })
+      .catch(err => {
+        console.error('Failed to load apartments for building', err);
+        setApartments([]);
+      });
+  }, [selectedBuildingId]);
+
+  // 3. Fetch usage records
+  const fetchUsageRecords = (isInitial = false) => {
+    if (isInitial) setLoading(true);
+    else setRefreshing(true);
+
+    const params = {};
+    if (selectedBuildingId) params.buildingId = selectedBuildingId;
+    if (selectedApartment && selectedApartment !== 'ALL') params.apartmentNumber = selectedApartment;
+    if (selectedCycleId && selectedCycleId !== 'ALL') params.billingCycleId = selectedCycleId;
+
+    API.get('/usage/records', { params })
+      .then(res => {
+        setUsageRecords(res.data || []);
+      })
+      .catch(err => console.error('Failed to fetch usage records', err))
+      .finally(() => {
+        setLoading(false);
+        setRefreshing(false);
+      });
   };
 
   useEffect(() => {
-    fetchData(selectedBuildingId);
-  }, [selectedBuildingId]);
-
-  const handleMeterChange = (e) => {
-    const selectedId = e.target.value;
-    const m = meters.find(item => String(item.meterId || item.residentId) === String(selectedId));
-    setFormData(prev => ({
-      ...prev,
-      meterId: selectedId,
-      previousReading: m ? (m.autoPreviousReading || 0) : prev.previousReading
-    }));
-  };
-
-  const handleOpenModal = () => {
-    if (meters.length > 0) {
-      const firstM = meters[0];
-      setFormData(prev => ({
-        ...prev,
-        meterId: firstM.meterId || firstM.residentId,
-        previousReading: firstM.autoPreviousReading || 0,
-        billingCycleId: cycles.length > 0 ? cycles[0].id : ''
-      }));
+    if (selectedBuildingId) {
+      fetchUsageRecords(loading);
     }
-    setShowModal(true);
-  };
+  }, [selectedBuildingId, selectedApartment, selectedCycleId]);
 
-  const handleRecordSubmit = async (e) => {
-    e.preventDefault();
-    if (!formData.meterId) {
-      alert('Please select a resident meter!');
-      return;
-    }
-    if (formData.currentReading < formData.previousReading) {
-      alert('Validation Error: Current reading cannot be less than previous reading!');
-      return;
+  // Extract unique apartment list from records + building inventory
+  const combinedApartments = useMemo(() => {
+    const aptSet = new Map();
+
+    // From building apartments API
+    if (Array.isArray(apartments)) {
+      apartments.forEach(a => {
+        const num = a.roomNumber || a.apartmentName || a.apartmentNumber;
+        if (num) {
+          aptSet.set(String(num).trim(), {
+            key: String(num).trim(),
+            label: `Flat ${num}`,
+            floor: a.floorNumber
+          });
+        }
+      });
     }
 
-    try {
-      await API.post('/usage/record', formData);
-      setShowModal(false);
-      fetchData(selectedBuildingId);
-      alert('Water usage reading logged successfully!');
-    } catch (err) {
-      alert(err.response?.data?.message || 'Failed to record usage');
+    // From usage records
+    if (Array.isArray(usageRecords)) {
+      usageRecords.forEach(u => {
+        if (u.apartmentNumber) {
+          const num = String(u.apartmentNumber).trim();
+          if (!aptSet.has(num)) {
+            aptSet.set(num, {
+              key: num,
+              label: `Flat ${num}`
+            });
+          }
+        }
+      });
     }
-  };
 
-  const handleOpenCsvModal = () => {
-    if (cycles.length > 0) {
-      const openCycle = cycles.find(c => c.status === 'OPEN') || cycles[0];
-      setCsvCycleId(openCycle.id);
-    }
-    setCsvFile(null);
-    setCsvValidation(null);
-    setCsvErrorBanner('');
-    setShowCsvModal(true);
-  };
+    return Array.from(aptSet.values()).sort((a, b) => a.key.localeCompare(b.key, undefined, { numeric: true }));
+  }, [apartments, usageRecords]);
 
-  const handleDownloadTemplate = async () => {
-    if (!selectedBuildingId || !csvCycleId) {
-      alert('Please select both a building and a target billing cycle first.');
-      return;
-    }
-    setDownloadingTemplate(true);
-    try {
-      const response = await API.get(
-        `/api/bulk-billing/template?buildingId=${selectedBuildingId}&billingCycleId=${csvCycleId}`,
-        { responseType: 'blob' }
-      );
-      const blob = new Blob([response.data], { type: 'text/csv;charset=utf-8;' });
-      const url = window.URL.createObjectURL(blob);
-      const link = document.createElement('a');
-      link.href = url;
-      const bObj = buildings.find(b => String(b.buildingId) === String(selectedBuildingId));
-      const bName = bObj ? bObj.buildingName.replace(/[^a-zA-Z0-9]/g, '_') : 'Building';
-      link.setAttribute('download', `Meter_Readings_Template_${bName}_Cycle_${csvCycleId}.csv`);
-      document.body.appendChild(link);
-      link.click();
-      link.remove();
-      window.URL.revokeObjectURL(url);
-    } catch (err) {
-      alert(err.response?.data?.message || 'Failed to download CSV template.');
-    } finally {
-      setDownloadingTemplate(false);
-    }
-  };
-
-  const handleCsvFileChange = (e) => {
-    const file = e.target.files[0];
-    if (file) {
-      if (!file.name.toLowerCase().endsWith('.csv')) {
-        alert('Please select a valid CSV file (.csv).');
-        return;
+  // Client-side filtering as an immediate reactive safeguard
+  const filteredRecords = useMemo(() => {
+    return usageRecords.filter(u => {
+      // Building filter
+      if (selectedBuildingId && u.buildingId && String(u.buildingId) !== String(selectedBuildingId)) {
+        return false;
       }
-      setCsvFile(file);
-      setCsvValidation(null);
-      setCsvErrorBanner('');
-    }
+      // Apartment filter
+      if (selectedApartment && selectedApartment !== 'ALL') {
+        const uApt = String(u.apartmentNumber || '').trim().toLowerCase();
+        const sApt = String(selectedApartment).trim().toLowerCase();
+        if (uApt !== sApt && !uApt.includes(sApt)) {
+          return false;
+        }
+      }
+      // Cycle filter
+      if (selectedCycleId && selectedCycleId !== 'ALL') {
+        if (String(u.billingCycleId) !== String(selectedCycleId)) {
+          return false;
+        }
+      }
+      // Search term
+      if (searchTerm.trim()) {
+        const term = searchTerm.toLowerCase();
+        const matchMeter = (u.meterNumber || '').toLowerCase().includes(term);
+        const matchResident = (u.residentName || '').toLowerCase().includes(term);
+        const matchApt = (u.apartmentNumber || '').toLowerCase().includes(term);
+        if (!matchMeter && !matchResident && !matchApt) return false;
+      }
+      return true;
+    });
+  }, [usageRecords, selectedBuildingId, selectedApartment, selectedCycleId, searchTerm]);
+
+  // Statistics
+  const totalUnits = useMemo(() => {
+    return filteredRecords.reduce((acc, r) => acc + (Number(r.unitsConsumed) || 0), 0);
+  }, [filteredRecords]);
+
+  const hasActiveFilters = Boolean(selectedApartment || selectedCycleId || searchTerm);
+
+  const handleResetFilters = () => {
+    setSelectedApartment('');
+    setSelectedCycleId('');
+    setSearchTerm('');
   };
 
-  const handleValidateCsv = async () => {
-    if (!csvFile) {
-      alert('Please select a CSV file to validate.');
-      return;
-    }
-    if (!selectedBuildingId || !csvCycleId) {
-      alert('Please select a building and target billing cycle.');
-      return;
-    }
-
-    setValidatingCsv(true);
-    setCsvErrorBanner('');
-
-    const formDataUpload = new FormData();
-    formDataUpload.append('file', csvFile);
-    formDataUpload.append('buildingId', selectedBuildingId);
-    formDataUpload.append('billingCycleId', csvCycleId);
-
-    try {
-      const res = await API.post('/api/bulk-billing/validate', formDataUpload, {
-        headers: { 'Content-Type': 'multipart/form-data' }
-      });
-      setCsvValidation(res.data);
-    } catch (err) {
-      console.error(err);
-      setCsvErrorBanner(err.response?.data?.message || 'Failed to validate uploaded CSV file. Please verify file format.');
-      setCsvValidation(null);
-    } finally {
-      setValidatingCsv(false);
-    }
-  };
-
-  const handleSubmitCsvReadings = async () => {
-    if (!csvFile || !csvValidation) {
-      alert('Please validate the CSV file before submitting.');
-      return;
-    }
-    if (csvValidation.errorCount > 0) {
-      alert('Cannot submit readings while validation errors exist. Please fix all errors before submitting.');
-      return;
-    }
-
-    setSubmittingCsv(true);
-    const formDataUpload = new FormData();
-    formDataUpload.append('file', csvFile);
-    formDataUpload.append('buildingId', selectedBuildingId);
-    formDataUpload.append('billingCycleId', csvCycleId);
-
-    try {
-      const res = await API.post('/api/bulk-billing/import-readings', formDataUpload, {
-        headers: { 'Content-Type': 'multipart/form-data' }
-      });
-      alert(res.data?.message || 'Meter readings successfully imported!');
-      setShowCsvModal(false);
-      fetchData(selectedBuildingId);
-    } catch (err) {
-      console.error(err);
-      alert(err.response?.data?.message || 'Failed to import meter readings from CSV.');
-    } finally {
-      setSubmittingCsv(false);
-    }
-  };
-
-  const handleDownloadErrorReport = async () => {
-    if (!csvValidation) return;
-    try {
-      const res = await API.post('/api/bulk-billing/error-report', csvValidation, {
-        responseType: 'blob'
-      });
-      const blob = new Blob([res.data], { type: 'text/csv;charset=utf-8;' });
-      const url = window.URL.createObjectURL(blob);
-      const link = document.createElement('a');
-      link.href = url;
-      link.setAttribute('download', `Meter_Readings_Errors_Cycle_${csvCycleId}.csv`);
-      document.body.appendChild(link);
-      link.click();
-      link.remove();
-      window.URL.revokeObjectURL(url);
-    } catch (err) {
-      alert('Failed to download error report.');
-    }
-  };
-
-  if (loading) return <LoadingSpinner text="Fetching water meter readings..." />;
-
-  const calculatedUnits = Math.max(0, (formData.currentReading || 0) - (formData.previousReading || 0));
+  if (loading && !buildings.length) {
+    return <LoadingSpinner text="Fetching water meter readings..." />;
+  }
 
   return (
     <div className="container-fluid py-4">
+      {/* Header section */}
       <div className="d-flex align-items-center justify-content-between mb-4 flex-wrap gap-3">
         <div>
           <h2 className="fw-bold mb-1 text-dark">Water Meter Consumption Logs</h2>
-          <p className="text-muted small mb-0">Digital logbook to record household readings per billing cycle</p>
+          <p className="text-muted small mb-0">
+            Digital logbook to view household readings per billing cycle imported via Bulk Billing
+          </p>
         </div>
 
-        <div className="d-flex align-items-center gap-3">
+        {/* Action Controls: Apartment selection & Bill cycle month selection */}
+        <div className="d-flex align-items-center gap-2 flex-wrap">
+          {/* Building Selection */}
           {buildings.length > 0 && (
-            <div className="d-flex align-items-center bg-white p-2 rounded-3 shadow-sm border">
-              <i className="bi bi-building text-dark me-2 ms-2 fs-5"></i>
+            <div className="d-flex align-items-center bg-white p-1.5 px-2.5 rounded-3 shadow-sm border" style={{ minWidth: '220px' }}>
+              <i className="bi bi-building text-primary me-2 fs-6"></i>
+              <div className="flex-grow-1">
+                <small className="text-muted d-block" style={{ fontSize: '0.7rem', lineHeight: 1 }}>Property / Building</small>
+                <select
+                  className="form-select form-select-sm border-0 p-0 fw-bold bg-transparent"
+                  value={selectedBuildingId}
+                  onChange={e => {
+                    setSelectedBuildingId(e.target.value);
+                    setSelectedApartment('');
+                    setSelectedCycleId('');
+                  }}
+                  id="building-select"
+                >
+                  {buildings.map(b => (
+                    <option key={b.buildingId} value={b.buildingId}>
+                      {b.buildingName} ({b.buildingNumber})
+                    </option>
+                  ))}
+                </select>
+              </div>
+            </div>
+          )}
+
+          {/* Apartment Selection */}
+          <div className="d-flex align-items-center bg-white p-1.5 px-2.5 rounded-3 shadow-sm border" style={{ minWidth: '180px' }}>
+            <i className="bi bi-door-open text-success me-2 fs-6"></i>
+            <div className="flex-grow-1">
+              <small className="text-muted d-block" style={{ fontSize: '0.7rem', lineHeight: 1 }}>Apartment / Room</small>
               <select
-                className="form-select border-0 bg-light fw-bold"
-                value={selectedBuildingId}
-                onChange={e => setSelectedBuildingId(e.target.value)}
+                className="form-select form-select-sm border-0 p-0 fw-bold bg-transparent"
+                value={selectedApartment}
+                onChange={e => setSelectedApartment(e.target.value)}
+                id="apartment-select"
               >
-                {buildings.map(b => (
-                  <option key={b.buildingId} value={b.buildingId}>
-                    {b.buildingName} ({b.buildingNumber})
+                <option value="">All Apartments</option>
+                {combinedApartments.map(apt => (
+                  <option key={apt.key} value={apt.key}>
+                    {apt.label}
                   </option>
                 ))}
               </select>
             </div>
+          </div>
+
+          {/* Billing Cycle Month Selection */}
+          <div className="d-flex align-items-center bg-white p-1.5 px-2.5 rounded-3 shadow-sm border" style={{ minWidth: '220px' }}>
+            <i className="bi bi-calendar-event text-info me-2 fs-6"></i>
+            <div className="flex-grow-1">
+              <small className="text-muted d-block" style={{ fontSize: '0.7rem', lineHeight: 1 }}>Billing Cycle Month</small>
+              <select
+                className="form-select form-select-sm border-0 p-0 fw-bold bg-transparent"
+                value={selectedCycleId}
+                onChange={e => setSelectedCycleId(e.target.value)}
+                id="cycle-select"
+              >
+                <option value="">All Billing Cycles</option>
+                {cycles.map(c => {
+                  const cycleLabel = c.billingMonth 
+                    ? `${c.billingMonth.substring(0, 7)} (Cycle #${c.id})`
+                    : `Cycle #${c.id} (${c.startDate || ''})`;
+                  return (
+                    <option key={c.id} value={c.id}>
+                      {cycleLabel} {c.status ? `[${c.status}]` : ''}
+                    </option>
+                  );
+                })}
+              </select>
+            </div>
+          </div>
+
+          {/* Quick Refresh */}
+          <button
+            className="btn btn-outline-secondary btn-sm p-2 px-2.5 rounded-3 shadow-sm"
+            onClick={() => fetchUsageRecords(false)}
+            title="Refresh logs"
+            disabled={refreshing}
+          >
+            <i className={`bi bi-arrow-clockwise ${refreshing ? 'spin' : ''}`}></i>
+          </button>
+
+          {/* Reset Filters */}
+          {hasActiveFilters && (
+            <button
+              className="btn btn-link text-decoration-none text-danger btn-sm p-1 fw-semibold"
+              onClick={handleResetFilters}
+              title="Clear all filters"
+            >
+              <i className="bi bi-x-circle me-1"></i> Clear
+            </button>
           )}
-
-          <button className="btn btn-outline-dark fw-bold py-2.5 px-3 shadow-sm" onClick={handleOpenCsvModal} id="upload-csv-btn">
-            <i className="bi bi-file-earmark-spreadsheet me-1.5"></i> Upload CSV Readings
-          </button>
-
-          <button className="btn btn-dark fw-bold py-2.5 px-4 shadow-sm" onClick={handleOpenModal} id="record-manual-btn">
-            <i className="bi bi-plus-circle me-1.5"></i> Record Meter Reading
-          </button>
         </div>
       </div>
 
+      {/* Summary Info Cards */}
+      <div className="row g-3 mb-4">
+        <div className="col-12 col-md-4">
+          <div className="card border-0 shadow-sm rounded-3 p-3 bg-white">
+            <div className="d-flex align-items-center justify-content-between">
+              <div>
+                <span className="text-muted small fw-semibold">Filtered Log Entries</span>
+                <h4 className="fw-bold mb-0 text-dark mt-1">{filteredRecords.length}</h4>
+              </div>
+              <div className="rounded-circle bg-light p-2.5 d-flex align-items-center justify-content-center text-primary" style={{ width: 44, height: 44 }}>
+                <i className="bi bi-list-check fs-5"></i>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div className="col-12 col-md-4">
+          <div className="card border-0 shadow-sm rounded-3 p-3 bg-white">
+            <div className="d-flex align-items-center justify-content-between">
+              <div>
+                <span className="text-muted small fw-semibold">Total Consumed</span>
+                <h4 className="fw-bold mb-0 text-primary mt-1">{totalUnits.toFixed(1)} <span className="fs-6 text-muted fw-normal">kL</span></h4>
+              </div>
+              <div className="rounded-circle bg-light p-2.5 d-flex align-items-center justify-content-center text-info" style={{ width: 44, height: 44 }}>
+                <i className="bi bi-droplet-half fs-5"></i>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div className="col-12 col-md-4">
+          <div className="card border-0 shadow-sm rounded-3 p-3 bg-white">
+            <div className="d-flex align-items-center justify-content-between">
+              <div>
+                <span className="text-muted small fw-semibold">Active Filter Scope</span>
+                <div className="fw-bold text-dark mt-1 text-truncate" style={{ maxWidth: '240px' }}>
+                  {selectedApartment ? `Flat ${selectedApartment}` : 'All Apartments'} &bull;{' '}
+                  {selectedCycleId ? `Cycle #${selectedCycleId}` : 'All Cycles'}
+                </div>
+              </div>
+              <div className="rounded-circle bg-light p-2.5 d-flex align-items-center justify-content-center text-success" style={{ width: 44, height: 44 }}>
+                <i className="bi bi-funnel-fill fs-5"></i>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Main Table Card */}
       <div className="card glass-card border shadow-sm bg-white">
+        {/* Table Toolbar */}
+        <div className="card-header bg-white border-bottom py-3 px-3 d-flex align-items-center justify-content-between flex-wrap gap-2">
+          <div className="d-flex align-items-center gap-2">
+            <h6 className="fw-bold mb-0 text-dark">
+              <i className="bi bi-journal-text me-2 text-primary"></i>
+              Consumption Records
+            </h6>
+            <span className="badge bg-light text-dark border px-2 py-1 small">
+              {filteredRecords.length} records
+            </span>
+          </div>
+
+          <div className="d-flex align-items-center gap-2">
+            <div className="input-group input-group-sm" style={{ width: '220px' }}>
+              <span className="input-group-text bg-light border-end-0">
+                <i className="bi bi-search text-muted"></i>
+              </span>
+              <input
+                type="text"
+                className="form-control bg-light border-start-0"
+                placeholder="Search meter, resident..."
+                value={searchTerm}
+                onChange={e => setSearchTerm(e.target.value)}
+              />
+              {searchTerm && (
+                <button className="btn btn-outline-secondary" type="button" onClick={() => setSearchTerm('')}>
+                  &times;
+                </button>
+              )}
+            </div>
+          </div>
+        </div>
+
         <div className="card-body p-0">
           <div className="table-responsive">
             <table className="table custom-table mb-0 align-middle">
-              <thead>
+              <thead className="bg-light">
                 <tr>
-                  <th>Meter Number</th>
+                  <th className="ps-3">Meter Number</th>
+                  <th>Apartment</th>
                   <th>Resident</th>
                   <th>Month / Cycle</th>
                   <th>Previous Reading</th>
                   <th>Current Reading</th>
                   <th>Units Consumed</th>
                   <th>Leak Status</th>
-                  <th>Recorded At</th>
+                  <th className="pe-3">Recorded At</th>
                 </tr>
               </thead>
               <tbody>
-                {usageRecords.length ? (
-                  usageRecords.map(u => (
-                    <tr key={u.usageId}>
-                      <td><span className="font-monospace text-dark fw-bold">{u.meterNumber}</span></td>
-                      <td className="fw-bold text-dark">{u.residentName}</td>
-                      <td><span className="text-muted fw-semibold">{u.month}/{u.year}</span></td>
-                      <td className="text-muted">{u.previousReading} m³</td>
-                      <td className="text-dark fw-semibold">{u.currentReading} m³</td>
-                      <td><span className="fw-bold text-dark fs-6">{u.unitsConsumed} kL</span></td>
+                {filteredRecords.length > 0 ? (
+                  filteredRecords.map(u => (
+                    <tr key={u.usageId || `${u.meterId}-${u.billingCycleId}`}>
+                      <td className="ps-3">
+                        <span className="font-monospace text-dark fw-bold">{u.meterNumber}</span>
+                      </td>
+                      <td>
+                        <span className="badge px-2.5 py-1.5 rounded-2 fw-bold text-dark border" style={{ backgroundColor: '#F1F5F9', borderColor: '#CBD5E1' }}>
+                          <i className="bi bi-door-closed me-1 text-secondary"></i>
+                          {u.apartmentNumber ? `Flat ${u.apartmentNumber}` : 'N/A'}
+                        </span>
+                      </td>
+                      <td className="fw-bold text-dark">
+                        <div className="d-flex align-items-center gap-2">
+                          <div className="rounded-circle bg-light text-primary d-flex align-items-center justify-content-center" style={{ width: 26, height: 26, fontSize: '0.75rem' }}>
+                            <i className="bi bi-person-fill"></i>
+                          </div>
+                          <span>{u.residentName || 'Unassigned'}</span>
+                        </div>
+                      </td>
+                      <td>
+                        <div>
+                          <span className="text-dark fw-bold">{u.month ? `${u.month}/${u.year}` : 'N/A'}</span>
+                          {u.billingCycleId && (
+                            <span className="badge bg-light text-muted border ms-1.5 fs-8">
+                              Cycle #{u.billingCycleId}
+                            </span>
+                          )}
+                        </div>
+                      </td>
+                      <td className="text-muted">{Number(u.previousReading || 0).toFixed(1)} m³</td>
+                      <td className="text-dark fw-semibold">{Number(u.currentReading || 0).toFixed(1)} m³</td>
+                      <td>
+                        <span className="fw-bold text-dark fs-6">{Number(u.unitsConsumed || 0).toFixed(1)} kL</span>
+                      </td>
                       <td>
                         {u.anomalyStatus === 'POTENTIAL_LEAK' ? (
                           <span className="badge px-2.5 py-1 rounded-2 fw-semibold fs-8" style={{ backgroundColor: '#FEF2F2', color: '#991B1B', border: '1px solid #FCA5A5' }}>
@@ -334,12 +427,36 @@ export default function OwnerUsagePage() {
                           </span>
                         )}
                       </td>
-                      <td className="text-muted small">{u.recordedAt ? u.recordedAt.substring(0, 10) : 'N/A'}</td>
+                      <td className="text-muted small pe-3">
+                        {u.recordedAt ? u.recordedAt.substring(0, 10) : 'N/A'}
+                      </td>
                     </tr>
                   ))
                 ) : (
                   <tr>
-                    <td colSpan="8" className="text-center py-4 text-muted">No meter reading logs recorded yet.</td>
+                    <td colSpan="9" className="text-center py-5 text-muted">
+                      <div className="py-4">
+                        <i className="bi bi-inbox fs-1 text-muted d-block mb-2"></i>
+                        <h6 className="fw-bold text-dark mb-1">No meter reading logs found</h6>
+                        <p className="text-muted small mb-3">
+                          {hasActiveFilters
+                            ? 'No records match your selected apartment or billing cycle filters.'
+                            : 'No consumption logs have been recorded or imported for this building yet.'}
+                        </p>
+                        {hasActiveFilters ? (
+                          <button className="btn btn-outline-dark btn-sm fw-bold" onClick={handleResetFilters}>
+                            <i className="bi bi-arrow-counterclockwise me-1"></i> Reset Filters
+                          </button>
+                        ) : (
+                          <button
+                            className="btn btn-primary btn-sm fw-bold px-3 shadow-sm"
+                            onClick={() => navigate('/owner/bulk-billing')}
+                          >
+                            <i className="bi bi-cloud-arrow-up me-1"></i> Go to Bulk Billing Import
+                          </button>
+                        )}
+                      </div>
+                    </td>
                   </tr>
                 )}
               </tbody>
@@ -347,330 +464,6 @@ export default function OwnerUsagePage() {
           </div>
         </div>
       </div>
-
-      {/* Modal Record Reading */}
-      {showModal && (
-        <div className="modal show d-block" style={{ backgroundColor: 'rgba(0,0,0,0.5)' }}>
-          <div className="modal-dialog modal-dialog-centered">
-            <div className="modal-content border-0 shadow-lg">
-              <div className="modal-header border-0 pb-0">
-                <h5 className="modal-title fw-bold text-dark">Record Water Meter Reading</h5>
-                <button type="button" className="btn-close" onClick={() => setShowModal(false)}></button>
-              </div>
-              <form onSubmit={handleRecordSubmit}>
-                <div className="modal-body">
-                  {/* Select Billing Cycle */}
-                  <div className="mb-3">
-                    <label className="form-label fw-semibold fs-7 text-dark">Target Billing Cycle *</label>
-                    <select
-                      className="form-select fw-bold border"
-                      value={formData.billingCycleId}
-                      onChange={e => setFormData({...formData, billingCycleId: e.target.value})}
-                      required
-                    >
-                      <option value="">-- Choose Billing Cycle --</option>
-                      {cycles.map(c => (
-                        <option key={c.id} value={c.id}>
-                          Cycle #{c.id}: {c.startDate} to {c.endDate} ({c.status})
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-
-                  {/* Select Resident / Meter */}
-                  <div className="mb-3">
-                    <label className="form-label fw-semibold fs-7 text-dark">Select Resident / Household Meter *</label>
-                    <select
-                      className="form-select fw-bold"
-                      value={formData.meterId}
-                      onChange={handleMeterChange}
-                      required
-                    >
-                      <option value="">-- Choose Household Meter --</option>
-                      {meters.map(m => (
-                        <option key={m.meterId || m.residentId} value={m.meterId || m.residentId}>
-                          {m.residentName || m.name} - Apt {m.apartmentNumber} ({m.meterNumber || 'WM-' + m.apartmentNumber})
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-
-                  <div className="row g-3 mb-3">
-                    <div className="col-6">
-                      <label className="form-label fw-semibold fs-7 text-dark">Previous Reading (m³) *</label>
-                      <input
-                        type="number"
-                        step="0.1"
-                        min="0"
-                        className="form-control fw-bold"
-                        value={formData.previousReading}
-                        onChange={e => setFormData({...formData, previousReading: parseFloat(e.target.value || 0)})}
-                        required
-                      />
-                      <small className="text-muted fs-8">Auto-filled from last reading</small>
-                    </div>
-                    <div className="col-6">
-                      <label className="form-label fw-semibold fs-7 text-dark">Current Reading (m³) *</label>
-                      <input
-                        type="number"
-                        step="0.1"
-                        min="0"
-                        className="form-control fw-bold border"
-                        value={formData.currentReading}
-                        onChange={e => setFormData({...formData, currentReading: parseFloat(e.target.value || 0)})}
-                        required
-                      />
-                    </div>
-                  </div>
-
-                  {/* Immediate Live Unit Display */}
-                  <div className="p-3 bg-light rounded text-center border">
-                    <small className="text-muted fw-semibold">Units Consumed (Calculated):</small>
-                    <div className="fw-extrabold fs-3 text-dark mt-1">
-                      {calculatedUnits.toFixed(1)} kL
-                    </div>
-                  </div>
-                </div>
-                <div className="modal-footer border-0">
-                  <button type="button" className="btn btn-light" onClick={() => setShowModal(false)}>Cancel</button>
-                  <button type="submit" className="btn btn-dark px-4 fw-bold">Save Usage Log</button>
-                </div>
-              </form>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Modal Upload CSV Readings */}
-      {showCsvModal && (
-        <div className="modal show d-block" style={{ backgroundColor: 'rgba(0,0,0,0.5)', zIndex: 1055 }} tabIndex="-1">
-          <div className="modal-dialog modal-dialog-centered modal-lg">
-            <div className="modal-content border-0 shadow-lg">
-              <div className="modal-header border-bottom pb-3">
-                <div>
-                  <h5 className="modal-title fw-bold text-dark">
-                    <i className="bi bi-file-earmark-spreadsheet text-dark me-2"></i>
-                    Upload Meter Readings via CSV
-                  </h5>
-                  <p className="text-muted small mb-0">
-                    Import water meter readings for households in an open billing cycle.
-                  </p>
-                </div>
-                <button type="button" className="btn-close" onClick={() => setShowCsvModal(false)}></button>
-              </div>
-
-              <div className="modal-body p-4">
-                {/* 1. Target Cycle & Template Download */}
-                <div className="row g-3 mb-3">
-                  <div className="col-md-7">
-                    <label className="form-label fw-semibold fs-7 text-dark">Target Billing Cycle *</label>
-                    <select
-                      className="form-select fw-bold border"
-                      value={csvCycleId}
-                      onChange={e => {
-                        setCsvCycleId(e.target.value);
-                        setCsvValidation(null);
-                        setCsvErrorBanner('');
-                      }}
-                      required
-                    >
-                      <option value="">-- Choose Billing Cycle --</option>
-                      {cycles.map(c => (
-                        <option key={c.id} value={c.id}>
-                          Cycle #{c.id}: {c.startDate} to {c.endDate} ({c.status})
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-                  <div className="col-md-5 d-flex align-items-end">
-                    <button
-                      type="button"
-                      className="btn btn-outline-secondary w-100 fw-semibold"
-                      onClick={handleDownloadTemplate}
-                      disabled={downloadingTemplate || !csvCycleId}
-                    >
-                      {downloadingTemplate ? (
-                        <>
-                          <span className="spinner-border spinner-border-sm me-2" role="status"></span>
-                          Downloading...
-                        </>
-                      ) : (
-                        <>
-                          <i className="bi bi-download me-1.5"></i> Download CSV Template
-                        </>
-                      )}
-                    </button>
-                  </div>
-                </div>
-
-                {/* 2. File Selector */}
-                <div className="mb-3">
-                  <label className="form-label fw-semibold fs-7 text-dark">Select CSV File (.csv) *</label>
-                  <div className="input-group">
-                    <input
-                      type="file"
-                      className="form-control border"
-                      accept=".csv,text/csv"
-                      onChange={handleCsvFileChange}
-                    />
-                    <button
-                      className="btn btn-dark fw-bold px-3"
-                      type="button"
-                      onClick={handleValidateCsv}
-                      disabled={validatingCsv || !csvFile || !csvCycleId}
-                    >
-                      {validatingCsv ? (
-                        <>
-                          <span className="spinner-border spinner-border-sm me-1.5" role="status"></span>
-                          Validating...
-                        </>
-                      ) : (
-                        <>
-                          <i className="bi bi-shield-check me-1.5"></i> Validate & Preview
-                        </>
-                      )}
-                    </button>
-                  </div>
-                  <div className="form-text fs-8 text-muted">
-                    Template columns: <code>resident_id, apartment_number, resident_name, meter_id, meter_number, previous_reading, current_reading</code>.
-                    Required to import: <code>resident_id, current_reading</code>.
-                  </div>
-                </div>
-
-                {/* Error Banner */}
-                {csvErrorBanner && (
-                  <div className="alert alert-danger d-flex align-items-center mb-3 py-2 px-3 rounded-2" role="alert">
-                    <i className="bi bi-exclamation-triangle-fill fs-5 me-2 text-danger"></i>
-                    <div className="small fw-semibold">{csvErrorBanner}</div>
-                  </div>
-                )}
-
-                {/* 3. Validation Summary Chips */}
-                {csvValidation && (
-                  <div className="mb-3">
-                    <div className="d-flex flex-wrap gap-2 mb-3">
-                      <span className="badge bg-light text-dark border px-3 py-2">
-                        Total Rows: <strong>{csvValidation.totalRowsInCsv}</strong>
-                      </span>
-                      <span className="badge bg-success-subtle text-success border border-success-subtle px-3 py-2">
-                        <i className="bi bi-check-circle me-1"></i> Valid: <strong>{csvValidation.validCount}</strong>
-                      </span>
-                      {csvValidation.errorCount > 0 && (
-                        <span className="badge bg-danger-subtle text-danger border border-danger-subtle px-3 py-2">
-                          <i className="bi bi-x-circle me-1"></i> Errors: <strong>{csvValidation.errorCount}</strong>
-                        </span>
-                      )}
-                      <span className="badge bg-info-subtle text-info-emphasis border border-info-subtle px-3 py-2">
-                        Total Consumption: <strong>{csvValidation.totalEstimatedUnits} kL</strong>
-                      </span>
-                    </div>
-
-                    {/* Preview Table */}
-                    <div className="border rounded-2 overflow-hidden" style={{ maxHeight: '240px', overflowY: 'auto' }}>
-                      <table className="table table-sm table-hover mb-0 align-middle fs-8">
-                        <thead className="table-light sticky-top">
-                          <tr>
-                            <th>#</th>
-                            <th>Resident / Apt</th>
-                            <th>Meter #</th>
-                            <th>Prev (m³)</th>
-                            <th>Current (m³)</th>
-                            <th>Units (kL)</th>
-                            <th>Status</th>
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {csvValidation.rows && csvValidation.rows.length > 0 ? (
-                            csvValidation.rows.map(row => (
-                              <tr key={row.rowNumber} className={row.status !== 'VALID' ? 'table-danger' : ''}>
-                                <td className="text-muted">{row.rowNumber}</td>
-                                <td className="fw-semibold text-dark">{row.residentName || 'N/A'} ({row.apartmentNumber || 'N/A'})</td>
-                                <td className="font-monospace text-muted">{row.meterNumber || 'N/A'}</td>
-                                <td>{row.previousReading != null ? row.previousReading : 'N/A'}</td>
-                                <td className="fw-bold">{row.currentReading != null ? row.currentReading : 'N/A'}</td>
-                                <td><span className="badge bg-light text-dark border">{row.unitsConsumed != null ? row.unitsConsumed : '0'}</span></td>
-                                <td>
-                                  {row.status === 'VALID' ? (
-                                    <span className="badge bg-success-subtle text-success">Valid</span>
-                                  ) : (
-                                    <span className="badge bg-danger text-white" title={row.errorMessage}>
-                                      {row.status}
-                                    </span>
-                                  )}
-                                  {row.errorMessage && (
-                                    <div className="text-danger small mt-0.5" style={{ fontSize: '0.72rem' }}>
-                                      {row.errorMessage}
-                                    </div>
-                                  )}
-                                </td>
-                              </tr>
-                            ))
-                          ) : (
-                            <tr>
-                              <td colSpan="7" className="text-center py-3 text-muted">No rows previewed</td>
-                            </tr>
-                          )}
-                        </tbody>
-                      </table>
-                    </div>
-
-                    {csvValidation.errorCount > 0 && (
-                      <div className="d-flex justify-content-between align-items-center mt-2">
-                        <span className="text-danger small">
-                          <i className="bi bi-info-circle me-1"></i> Fix row errors or download error report to inspect details.
-                        </span>
-                        <button
-                          type="button"
-                          className="btn btn-outline-danger btn-sm"
-                          onClick={handleDownloadErrorReport}
-                        >
-                          <i className="bi bi-file-earmark-arrow-down me-1"></i> Download Error Report
-                        </button>
-                      </div>
-                    )}
-                  </div>
-                )}
-
-                {/* Safe Safeguard Notice */}
-                <div className="p-2.5 bg-light rounded-2 border text-muted small d-flex align-items-center gap-2">
-                  <i className="bi bi-shield-check text-success fs-5"></i>
-                  <div>
-                    <strong>Safeguard:</strong> Submitting readings saves water consumption records only. The billing cycle will <strong>remain OPEN</strong> and <strong>no bills will be generated</strong>.
-                  </div>
-                </div>
-              </div>
-
-              <div className="modal-footer border-top bg-light">
-                <button type="button" className="btn btn-light" onClick={() => setShowCsvModal(false)}>
-                  Cancel
-                </button>
-                <button
-                  type="button"
-                  className="btn btn-dark fw-bold px-4"
-                  onClick={handleSubmitCsvReadings}
-                  disabled={
-                    submittingCsv ||
-                    !csvValidation ||
-                    csvValidation.errorCount > 0 ||
-                    csvValidation.validCount === 0
-                  }
-                >
-                  {submittingCsv ? (
-                    <>
-                      <span className="spinner-border spinner-border-sm me-2" role="status"></span>
-                      Submitting Readings...
-                    </>
-                  ) : (
-                    <>
-                      <i className="bi bi-check2-circle me-1.5"></i> Submit Readings
-                    </>
-                  )}
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   );
 }

@@ -31,6 +31,7 @@ import ResidentNotificationsPage from './resident/pages/ResidentNotificationsPag
 
 import ProfilePage from './shared/pages/ProfilePage';
 import InvoicesPage from './owner/pages/InvoicesPage';
+import OwnerHistoryPage from './owner/pages/OwnerHistoryPage';
 
 export default function App() {
   return (
@@ -66,6 +67,7 @@ export default function App() {
             <Route path="/owner/billing" element={<OwnerBillingPage />} />
             <Route path="/owner/bulk-billing" element={<BulkBillingPage />} />
             <Route path="/owner/invoices" element={<InvoicesPage />} />
+            <Route path="/owner/history" element={<OwnerHistoryPage />} />
             <Route path="/owner/profile" element={<ProfilePage />} />
           </Route>
 

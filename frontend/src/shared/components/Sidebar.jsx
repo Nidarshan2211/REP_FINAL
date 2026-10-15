@@ -58,8 +58,8 @@ export default function Sidebar() {
             <NavLink to="/owner/invoices" className={({ isActive }) => `sidebar-link ${isActive ? 'active' : ''}`}>
               <i className="bi bi-receipt-cutoff"></i> Invoices
             </NavLink>
-            <NavLink to="/owner/profile" className={({ isActive }) => `sidebar-link ${isActive ? 'active' : ''}`}>
-              <i className="bi bi-person-circle"></i> My Profile
+            <NavLink to="/owner/history" className={({ isActive }) => `sidebar-link ${isActive ? 'active' : ''}`}>
+              <i className="bi bi-clock-history"></i> Resident History
             </NavLink>
           </>
         )}

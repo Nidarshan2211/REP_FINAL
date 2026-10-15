@@ -77,9 +77,9 @@ public class TariffCalculationService {
         BigDecimal tier1Limit = new BigDecimal("20.00");
         BigDecimal tier2Limit = new BigDecimal("40.00");
 
-        BigDecimal tier1Rate = baseTariff.multiply(tier1Multiplier).setScale(2, RoundingMode.HALF_UP);
-        BigDecimal tier2Rate = baseTariff.multiply(tier2Multiplier).setScale(2, RoundingMode.HALF_UP);
-        BigDecimal tier3Rate = baseTariff.multiply(tier3Multiplier).setScale(2, RoundingMode.HALF_UP);
+        BigDecimal tier1Rate = (baseTariff.compareTo(BigDecimal.ZERO) > 0 ? baseTariff.multiply(tier1Multiplier) : new BigDecimal("2.50")).setScale(2, RoundingMode.HALF_UP);
+        BigDecimal tier2Rate = (baseTariff.compareTo(BigDecimal.ZERO) > 0 ? baseTariff.multiply(tier2Multiplier) : new BigDecimal("4.00")).setScale(2, RoundingMode.HALF_UP);
+        BigDecimal tier3Rate = (baseTariff.compareTo(BigDecimal.ZERO) > 0 ? baseTariff.multiply(tier3Multiplier) : new BigDecimal("6.00")).setScale(2, RoundingMode.HALF_UP);
 
         if (existingPlan != null) {
             existingPlan.setAverageProcurementCost(averageProcurementCost);

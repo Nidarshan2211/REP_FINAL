@@ -8,10 +8,12 @@ import com.smartwater.billing.resident.entity.ApartmentOccupancy.OccupancyStatus
 import com.smartwater.billing.resident.entity.Notification;
 import com.smartwater.billing.resident.entity.Resident;
 import com.smartwater.billing.resident.entity.ResidentInvitation;
+import com.smartwater.billing.common.entity.Bill;
 import com.smartwater.billing.common.entity.User;
 import com.smartwater.billing.common.entity.WaterMeter;
 import com.smartwater.billing.common.exception.BadRequestException;
 import com.smartwater.billing.common.exception.ResourceNotFoundException;
+import com.smartwater.billing.common.repository.BillRepository;
 import com.smartwater.billing.owner.repository.ApartmentRepository;
 import com.smartwater.billing.resident.repository.ApartmentOccupancyRepository;
 import com.smartwater.billing.resident.repository.NotificationRepository;
@@ -33,9 +35,14 @@ import java.util.Collections;
 import java.util.List;
 import java.util.Optional;
 import java.util.stream.Collectors;
+import jakarta.persistence.EntityManager;
+import jakarta.persistence.PersistenceContext;
 
 @Service
 public class OccupancyService {
+
+    @PersistenceContext
+    private EntityManager entityManager;
 
     private final ApartmentOccupancyRepository occupancyRepository;
     private final ApartmentRepository apartmentRepository;
@@ -46,6 +53,7 @@ public class OccupancyService {
     private final NotificationRepository notificationRepository;
     private final BuildingOwnerRepository ownerRepository;
     private final OccupancyRequestRepository occupancyRequestRepository;
+    private final BillRepository billRepository;
 
     public OccupancyService(
             ApartmentOccupancyRepository occupancyRepository,
@@ -56,7 +64,8 @@ public class OccupancyService {
             UserRepository userRepository,
             NotificationRepository notificationRepository,
             BuildingOwnerRepository ownerRepository,
-            OccupancyRequestRepository occupancyRequestRepository
+            OccupancyRequestRepository occupancyRequestRepository,
+            BillRepository billRepository
     ) {
         this.occupancyRepository = occupancyRepository;
         this.apartmentRepository = apartmentRepository;
@@ -67,6 +76,7 @@ public class OccupancyService {
         this.notificationRepository = notificationRepository;
         this.ownerRepository = ownerRepository;
         this.occupancyRequestRepository = occupancyRequestRepository;
+        this.billRepository = billRepository;
     }
 
     private User validateResidentUser(String email) {
@@ -177,6 +187,30 @@ public class OccupancyService {
         resident.setApartmentNumber(apartment.getRoomNumber());
         resident = residentRepository.save(resident);
 
+        // Audit log in resident_history
+        try {
+            BuildingOwner bOwner = building.getOwner();
+            if (bOwner != null) {
+                entityManager.createNativeQuery(
+                        "INSERT INTO resident_history (owner_id, building_id, building_name, apartment_id, apartment_name, room_number, resident_id, resident_name, resident_email, resident_phone, activity_type, details, actor, timestamp) " +
+                        "VALUES (:oId, :bId, :bName, :aId, :aName, :room, :resId, :resName, :resEmail, :resPhone, 'JOINED', :details, :actor, NOW())"
+                )
+                .setParameter("oId", bOwner.getOwnerId())
+                .setParameter("bId", building.getBuildingId())
+                .setParameter("bName", building.getBuildingName())
+                .setParameter("aId", apartment.getApartmentId())
+                .setParameter("aName", apartment.getApartmentName())
+                .setParameter("room", apartment.getRoomNumber())
+                .setParameter("resId", resident.getResidentId())
+                .setParameter("resName", resident.getName())
+                .setParameter("resEmail", resident.getEmail())
+                .setParameter("resPhone", resident.getPhone())
+                .setParameter("details", "Resident claimed and occupied " + apartment.getApartmentName())
+                .setParameter("actor", resident.getName())
+                .executeUpdate();
+            }
+        } catch (Exception ignored) {}
+
         // Associate physical WaterMeter with the resident and apartment
         String mNum = "WM-" + building.getBuildingNumber() + "-" + apartment.getRoomNumber();
         WaterMeter meter = waterMeterRepository.findByBuildingBuildingId(building.getBuildingId()).stream()
@@ -233,12 +267,6 @@ public class OccupancyService {
             resident = occupancy.getResident();
             apartment = occupancy.getApartment();
             building = apartment.getBuilding();
-
-            // 1. End Occupancy
-            occupancy.setStatus(OccupancyStatus.ENDED);
-            occupancy.setEndDate(moveOutTime);
-            occupancy.setMoveOutReason(request.getReason() != null ? request.getReason().trim() : "Resident voluntary move-out");
-            occupancyRepository.save(occupancy);
         } else {
             // Check legacy resident profile
             resident = residentRepository.findByEmailIgnoreCase(user.getEmail())
@@ -263,7 +291,27 @@ public class OccupancyService {
                                 .build();
                         return apartmentRepository.save(newApt);
                     });
+        }
 
+        // GUARD: Resident cannot leave the apartment if they have any pending / unpaid bills
+        List<Bill> pendingBills = billRepository.findByResidentResidentIdOrderByGeneratedAtDesc(resident.getResidentId()).stream()
+                .filter(b -> b.getStatus() != Bill.BillStatus.PAID)
+                .collect(Collectors.toList());
+
+        if (!pendingBills.isEmpty()) {
+            double totalDue = pendingBills.stream().mapToDouble(b -> b.getAmount() != null ? b.getAmount() : 0.0).sum();
+            throw new BadRequestException("Cannot leave apartment: You have " + pendingBills.size() + " unpaid water bill(s) totaling $"
+                    + String.format("%.2f", totalDue) + ". All pending bills must be cleared before moving out.");
+        }
+
+        // 1. End Occupancy
+        if (activeOpt.isPresent()) {
+            ApartmentOccupancy occupancy = activeOpt.get();
+            occupancy.setStatus(OccupancyStatus.ENDED);
+            occupancy.setEndDate(moveOutTime);
+            occupancy.setMoveOutReason(request.getReason() != null ? request.getReason().trim() : "Resident voluntary move-out");
+            occupancyRepository.save(occupancy);
+        } else {
             // Create ended occupancy record for audit trail
             ApartmentOccupancy endedRecord = ApartmentOccupancy.builder()
                     .apartment(apartment)
@@ -276,6 +324,7 @@ public class OccupancyService {
             occupancyRepository.save(endedRecord);
         }
 
+
         // 2. Detach resident from Water Meter fixture, but preserve meter in building & apartment
         WaterMeter meter = waterMeterRepository.findByResidentResidentId(resident.getResidentId()).orElse(null);
         if (meter != null) {
@@ -286,6 +335,31 @@ public class OccupancyService {
         // 3. Update resident profile active apartment reference to reflect no active occupancy
         resident.setApartmentNumber("FORMER-" + apartment.getRoomNumber());
         residentRepository.save(resident);
+
+        // Audit log in resident_history
+        try {
+            BuildingOwner bOwner = building.getOwner();
+            if (bOwner != null) {
+                String reason = request.getReason() != null ? request.getReason().trim() : "Resident voluntary move-out";
+                entityManager.createNativeQuery(
+                        "INSERT INTO resident_history (owner_id, building_id, building_name, apartment_id, apartment_name, room_number, resident_id, resident_name, resident_email, resident_phone, activity_type, details, actor, timestamp) " +
+                        "VALUES (:oId, :bId, :bName, :aId, :aName, :room, :resId, :resName, :resEmail, :resPhone, 'LEFT', :details, :actor, NOW())"
+                )
+                .setParameter("oId", bOwner.getOwnerId())
+                .setParameter("bId", building.getBuildingId())
+                .setParameter("bName", building.getBuildingName())
+                .setParameter("aId", apartment.getApartmentId())
+                .setParameter("aName", apartment.getApartmentName())
+                .setParameter("room", apartment.getRoomNumber())
+                .setParameter("resId", resident.getResidentId())
+                .setParameter("resName", resident.getName())
+                .setParameter("resEmail", resident.getEmail())
+                .setParameter("resPhone", resident.getPhone())
+                .setParameter("details", "Voluntary Move-Out: " + reason)
+                .setParameter("actor", resident.getName() + " (Resident)")
+                .executeUpdate();
+            }
+        } catch (Exception ignored) {}
 
         // 4. Send Notification
         Notification notif = Notification.builder()
@@ -569,6 +643,30 @@ public class OccupancyService {
             resident.setBuilding(building);
             resident.setApartmentNumber(apartment.getRoomNumber());
             residentRepository.save(resident);
+
+            // Audit log in resident_history
+            try {
+                BuildingOwner bOwner = building.getOwner();
+                if (bOwner != null) {
+                    entityManager.createNativeQuery(
+                            "INSERT INTO resident_history (owner_id, building_id, building_name, apartment_id, apartment_name, room_number, resident_id, resident_name, resident_email, resident_phone, activity_type, details, actor, timestamp) " +
+                            "VALUES (:oId, :bId, :bName, :aId, :aName, :room, :resId, :resName, :resEmail, :resPhone, 'JOINED', :details, :actor, NOW())"
+                    )
+                    .setParameter("oId", bOwner.getOwnerId())
+                    .setParameter("bId", building.getBuildingId())
+                    .setParameter("bName", building.getBuildingName())
+                    .setParameter("aId", apartment.getApartmentId())
+                    .setParameter("aName", apartment.getApartmentName())
+                    .setParameter("room", apartment.getRoomNumber())
+                    .setParameter("resId", resident.getResidentId())
+                    .setParameter("resName", resident.getName())
+                    .setParameter("resEmail", resident.getEmail())
+                    .setParameter("resPhone", resident.getPhone())
+                    .setParameter("details", "Occupancy request approved. Moved into " + apartment.getApartmentName())
+                    .setParameter("actor", ownerUser.getName())
+                    .executeUpdate();
+                }
+            } catch (Exception ignored) {}
 
             // 7. Connect physical water meter
             String mNum = "WM-" + building.getBuildingNumber() + "-" + apartment.getRoomNumber();

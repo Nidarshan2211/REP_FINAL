@@ -376,4 +376,71 @@ public class CsvMeterReadingInputTest {
         assertEquals(2, waterMeterRepository.count());
         assertEquals(0, waterUsageRepository.count());
     }
+
+    @Test
+    @DisplayName("Regression Test: Multi-cycle previous reading mismatch detection and correct cycle template pre-population")
+    void testMultiCycle_PreviousReadingMismatch_AndCorrectTemplatePopulation() throws Exception {
+        // Step 1: Record Cycle 1 usage for Alice (0.00 -> 124.50) and Bob (0.00 -> 98.00)
+        String cycle1Csv = "resident_id,apartment_number,resident_name,meter_id,meter_number,previous_reading,current_reading\n" +
+                resident1.getResidentId() + ",101,Resident Alice," + meter1.getMeterId() + ",WM-SB-101,0.00,124.50\n" +
+                resident2.getResidentId() + ",102,Resident Bob," + meter2.getMeterId() + ",WM-SB-102,0.00,98.00\n";
+        MockMultipartFile fileC1 = new MockMultipartFile("file", "c1.csv", "text/csv", cycle1Csv.getBytes(StandardCharsets.UTF_8));
+        bulkBillingService.importReadings(owner.getUser().getEmail(), building.getBuildingId(), cycle.getId(), fileC1);
+
+        // Step 2: Create OPEN Cycle 2
+        final BillingCycle cycle2 = billingCycleRepository.save(BillingCycle.builder()
+                .building(building)
+                .startDate(LocalDate.of(2026, 12, 1))
+                .endDate(LocalDate.of(2026, 12, 31))
+                .billingMonth(LocalDate.of(2026, 12, 1))
+                .status(BillingCycle.CycleStatus.OPEN)
+                .build());
+
+        // Step 3: Verify Cycle 2 template generation automatically carries over Cycle 1 ending readings (124.50 and 98.00)
+        byte[] c2TemplateBytes = bulkBillingService.generateTemplate(owner.getUser().getEmail(), building.getBuildingId(), cycle2.getId());
+        List<List<String>> c2Rows = com.smartwater.billing.common.util.CsvHelper.parseCsv(new java.io.ByteArrayInputStream(c2TemplateBytes));
+        assertEquals("124.50", c2Rows.get(1).get(5), "Cycle 2 starting previous_reading for Alice must be 124.50");
+        assertEquals("98.00", c2Rows.get(2).get(5), "Cycle 2 starting previous_reading for Bob must be 98.00");
+
+        // Step 4: If owner uploads old Cycle 1 CSV (with previous_reading = 0.00) to Cycle 2, pre-flight validation catches mismatch
+        BulkValidationResponse preview = bulkBillingService.validateCsv(owner.getUser().getEmail(), building.getBuildingId(), cycle2.getId(), fileC1);
+        assertEquals(2, preview.getErrorCount(), "Both rows must fail previous reading mismatch");
+        assertFalse(preview.isCanFinalize());
+        assertTrue(preview.getRows().get(0).getErrorMessage().contains("Previous reading mismatch for resident Resident Alice"));
+        assertTrue(preview.getRows().get(0).getErrorMessage().contains("Uploaded: 0.00, Trusted Database: 124.50"));
+
+        // Step 5: Finalize call must also strictly reject previous reading mismatch
+        BadRequestException ex = assertThrows(BadRequestException.class, () ->
+                bulkBillingService.generateBills(owner.getUser().getEmail(), building.getBuildingId(), cycle2.getId(), fileC1)
+        );
+        assertTrue(ex.getMessage().contains("Previous reading mismatch for resident Resident Alice"));
+        assertTrue(ex.getMessage().contains("Uploaded: 0.00, Trusted Database: 124.50"));
+
+        // Step 6: Uploading valid Cycle 2 CSV (with previous_reading = 124.50 / 98.00 and current = 150.00 / 120.00) passes validation
+        String validC2Csv = "resident_id,apartment_number,resident_name,meter_id,meter_number,previous_reading,current_reading\n" +
+                resident1.getResidentId() + ",101,Resident Alice," + meter1.getMeterId() + ",WM-SB-101,124.50,150.00\n" +
+                resident2.getResidentId() + ",102,Resident Bob," + meter2.getMeterId() + ",WM-SB-102,98.00,120.00\n";
+        MockMultipartFile validC2File = new MockMultipartFile("file", "valid_c2.csv", "text/csv", validC2Csv.getBytes(StandardCharsets.UTF_8));
+        BulkValidationResponse validPreview = bulkBillingService.validateCsv(owner.getUser().getEmail(), building.getBuildingId(), cycle2.getId(), validC2File);
+        assertEquals(2, validPreview.getValidCount());
+        assertEquals(0, validPreview.getErrorCount());
+        assertTrue(validPreview.isCanFinalize());
+
+        // Step 7: Cycle 1 re-validation: when Cycle 1 already has usage (0.00 -> 124.50), Cycle 1's starting reading is still 0.00
+        double cycle1AlicePrev = bulkBillingService.getTrustedPreviousReading(meter1.getMeterId(), cycle.getId());
+        assertEquals(0.00, cycle1AlicePrev, 0.001, "Cycle 1 trusted previous reading must remain 0.00 even after readings are recorded");
+    }
+
+    @Test
+    @DisplayName("Regression Test: Meter already assigned to another resident cannot be hijacked in CSV upload")
+    void testCrossResidentMeterHijacking_Rejected() {
+        // Attempt to upload Alice's row pointing to Bob's meter2
+        String hijackCsv = "resident_id,apartment_number,resident_name,meter_id,meter_number,previous_reading,current_reading\n" +
+                resident1.getResidentId() + ",101,Resident Alice," + meter2.getMeterId() + ",WM-SB-102,0.00,50.00\n";
+        MockMultipartFile file = new MockMultipartFile("file", "hijack.csv", "text/csv", hijackCsv.getBytes(StandardCharsets.UTF_8));
+
+        BulkValidationResponse preview = bulkBillingService.validateCsv(owner.getUser().getEmail(), building.getBuildingId(), cycle.getId(), file);
+        assertEquals(1, preview.getErrorCount());
+        assertTrue(preview.getRows().get(0).getErrorMessage().contains("is already assigned to resident Resident Bob"));
+    }
 }

@@ -3,6 +3,7 @@ package com.smartwater.billing.owner.controller;
 import com.smartwater.billing.owner.dto.BuildingDTOs.*;
 import com.smartwater.billing.common.dto.DashboardDTOs.OwnerDashboardStats;
 import com.smartwater.billing.common.dto.DashboardDTOs.OwnerUsageComparisonResponse;
+import com.smartwater.billing.common.dto.DashboardDTOs.ResidentHistoryItemDTO;
 import com.smartwater.billing.resident.dto.ResidentDTOs.*;
 import com.smartwater.billing.owner.service.BuildingOwnerService;
 import com.smartwater.billing.resident.service.ResidentService;
@@ -13,6 +14,7 @@ import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
+import java.util.Map;
 
 @RestController
 @RequestMapping
@@ -74,9 +76,10 @@ public class BuildingOwnerController {
     @GetMapping({"/owners/usage-comparison", "/api/owner/usage-comparison"})
     public ResponseEntity<OwnerUsageComparisonResponse> getUsageComparison(
             Authentication authentication,
-            @RequestParam(value = "buildingId", required = false) Long buildingId
+            @RequestParam(value = "buildingId", required = false) Long buildingId,
+            @RequestParam(value = "billingCycleId", required = false) Long billingCycleId
     ) {
-        return ResponseEntity.ok(residentService.getOwnerUsageComparison(authentication.getName(), buildingId));
+        return ResponseEntity.ok(residentService.getOwnerUsageComparison(authentication.getName(), buildingId, billingCycleId));
     }
 
     @PutMapping({"/owners/residents/{id}", "/api/owner/residents/{id}"})
@@ -105,4 +108,16 @@ public class BuildingOwnerController {
         residentService.deleteResident(authentication.getName(), residentId);
         return ResponseEntity.noContent().build();
     }
+
+    @GetMapping({"/owners/history", "/owner/history", "/api/owner/history", "/api/owners/history", "/api/owner/resident-history"})
+    public ResponseEntity<List<ResidentHistoryItemDTO>> getResidentHistory(Authentication authentication) {
+        return ResponseEntity.ok(ownerService.getResidentHistory(authentication.getName()));
+    }
+
+    @DeleteMapping({"/owners/leave", "/owner/leave", "/api/owner/leave", "/api/owners/leave"})
+    public ResponseEntity<?> leaveApplication(Authentication authentication) {
+        ownerService.leaveApplication(authentication.getName());
+        return ResponseEntity.ok(Map.of("message", "You have successfully left the platform. Your account and properties have been removed."));
+    }
 }
+

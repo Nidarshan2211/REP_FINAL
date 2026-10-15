@@ -18,16 +18,23 @@ import com.smartwater.billing.common.util.TokenGenerator;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import jakarta.persistence.EntityManager;
+import jakarta.persistence.PersistenceContext;
 
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.stream.Collectors;
 
 @Service
 public class ResidentService {
+
+    @PersistenceContext
+    private EntityManager entityManager;
 
     private final ResidentRepository residentRepository;
     private final ResidentInvitationRepository invitationRepository;
@@ -42,6 +49,7 @@ public class ResidentService {
     private final ApartmentRepository apartmentRepository;
     private final ApartmentOccupancyRepository occupancyRepository;
     private final OccupancyRequestRepository occupancyRequestRepository;
+    private final BillingCycleRepository billingCycleRepository;
 
     public ResidentService(
             ResidentRepository residentRepository,
@@ -56,7 +64,8 @@ public class ResidentService {
             EmailService emailService,
             ApartmentRepository apartmentRepository,
             ApartmentOccupancyRepository occupancyRepository,
-            OccupancyRequestRepository occupancyRequestRepository
+            OccupancyRequestRepository occupancyRequestRepository,
+            BillingCycleRepository billingCycleRepository
     ) {
         this.residentRepository = residentRepository;
         this.invitationRepository = invitationRepository;
@@ -71,6 +80,7 @@ public class ResidentService {
         this.apartmentRepository = apartmentRepository;
         this.occupancyRepository = occupancyRepository;
         this.occupancyRequestRepository = occupancyRequestRepository;
+        this.billingCycleRepository = billingCycleRepository;
     }
 
     @Value("${resident.invitation.expiration-hours:24}")
@@ -383,6 +393,29 @@ public class ResidentService {
             throw new BadRequestException("Unauthorized access to resident!");
         }
 
+        // Audit log in resident_history
+        try {
+            BuildingOwner bOwner = resident.getBuilding() != null ? resident.getBuilding().getOwner() : null;
+            if (bOwner != null) {
+                entityManager.createNativeQuery(
+                        "INSERT INTO resident_history (owner_id, building_id, building_name, apartment_id, apartment_name, room_number, resident_id, resident_name, resident_email, resident_phone, activity_type, details, actor, timestamp) " +
+                        "VALUES (:oId, :bId, :bName, null, :aptName, :room, :resId, :resName, :resEmail, :resPhone, 'LEFT', :details, :actor, NOW())"
+                )
+                .setParameter("oId", bOwner.getOwnerId())
+                .setParameter("bId", resident.getBuilding() != null ? resident.getBuilding().getBuildingId() : null)
+                .setParameter("bName", resident.getBuilding() != null ? resident.getBuilding().getBuildingName() : "")
+                .setParameter("aptName", "Flat " + resident.getApartmentNumber())
+                .setParameter("room", resident.getApartmentNumber())
+                .setParameter("resId", resident.getResidentId())
+                .setParameter("resName", resident.getName())
+                .setParameter("resEmail", resident.getEmail())
+                .setParameter("resPhone", resident.getPhone())
+                .setParameter("details", "Resident removed by building owner")
+                .setParameter("actor", owner.getUser() != null ? owner.getUser().getName() : "Building Owner")
+                .executeUpdate();
+            }
+        } catch (Exception ignored) {}
+
         // End active occupancy if any
         Optional<ApartmentOccupancy> activeOcc = occupancyRepository.findFirstByResidentResidentIdAndStatus(residentId, ApartmentOccupancy.OccupancyStatus.ACTIVE);
         if (activeOcc.isPresent()) {
@@ -406,19 +439,10 @@ public class ResidentService {
             occupancyRequestRepository.deleteAll(reqs);
         }
 
-        // Check if resident has billing history
-        boolean hasBills = !billRepository.findByResidentResidentIdOrderByGeneratedAtDesc(residentId).isEmpty();
-        if (hasBills) {
-            resident.setAccountStatus(Resident.AccountStatus.INACTIVE);
-            resident.setApartmentNumber("Vacated");
-            residentRepository.save(resident);
-        } else {
-            List<ApartmentOccupancy> allOccs = occupancyRepository.findByResidentResidentIdOrderByStartDateDesc(residentId);
-            if (!allOccs.isEmpty()) {
-                occupancyRepository.deleteAll(allOccs);
-            }
-            residentRepository.delete(resident);
-        }
+        // Mark resident as removed and preserve historical tenancy and billing records
+        resident.setAccountStatus(Resident.AccountStatus.INACTIVE);
+        resident.setApartmentNumber("Removed");
+        residentRepository.save(resident);
     }
 
     @Transactional
@@ -430,6 +454,29 @@ public class ResidentService {
         if (!resident.getBuilding().getOwner().getOwnerId().equals(owner.getOwnerId())) {
             throw new BadRequestException("Unauthorized access to resident!");
         }
+
+        // Audit log in resident_history
+        try {
+            BuildingOwner bOwner = resident.getBuilding() != null ? resident.getBuilding().getOwner() : null;
+            if (bOwner != null) {
+                entityManager.createNativeQuery(
+                        "INSERT INTO resident_history (owner_id, building_id, building_name, apartment_id, apartment_name, room_number, resident_id, resident_name, resident_email, resident_phone, activity_type, details, actor, timestamp) " +
+                        "VALUES (:oId, :bId, :bName, null, :aptName, :room, :resId, :resName, :resEmail, :resPhone, 'LEFT', :details, :actor, NOW())"
+                )
+                .setParameter("oId", bOwner.getOwnerId())
+                .setParameter("bId", resident.getBuilding() != null ? resident.getBuilding().getBuildingId() : null)
+                .setParameter("bName", resident.getBuilding() != null ? resident.getBuilding().getBuildingName() : "")
+                .setParameter("aptName", "Flat " + resident.getApartmentNumber())
+                .setParameter("room", resident.getApartmentNumber())
+                .setParameter("resId", resident.getResidentId())
+                .setParameter("resName", resident.getName())
+                .setParameter("resEmail", resident.getEmail())
+                .setParameter("resPhone", resident.getPhone())
+                .setParameter("details", "Resident vacated by building owner")
+                .setParameter("actor", owner.getUser() != null ? owner.getUser().getName() : "Building Owner")
+                .executeUpdate();
+            }
+        } catch (Exception ignored) {}
 
         // End active occupancy
         Optional<ApartmentOccupancy> activeOcc = occupancyRepository.findFirstByResidentResidentIdAndStatus(residentId, ApartmentOccupancy.OccupancyStatus.ACTIVE);
@@ -634,8 +681,12 @@ public class ResidentService {
 
     @Transactional
     public OwnerUsageComparisonResponse getOwnerUsageComparison(String ownerEmail, Long buildingId) {
+        return getOwnerUsageComparison(ownerEmail, buildingId, null);
+    }
+
+    @Transactional
+    public OwnerUsageComparisonResponse getOwnerUsageComparison(String ownerEmail, Long buildingId, Long billingCycleId) {
         BuildingOwner owner = ownerService.getOwnerByUserEmail(ownerEmail);
-        ensureDefaultResidentsForOwner(owner);
 
         List<Building> buildings = buildingRepository.findByOwnerOwnerId(owner.getOwnerId());
         if (buildings.isEmpty()) {
@@ -643,49 +694,147 @@ public class ResidentService {
                     .buildingId(null)
                     .buildingName("N/A")
                     .buildingAverage(0.0)
+                    .totalApartments(0)
+                    .activeApartments(0)
                     .households(List.of())
                     .build();
         }
 
-        Building selectedBuilding = buildings.get(0);
+        Building chosenBuilding = buildings.get(0);
         if (buildingId != null) {
             for (Building b : buildings) {
                 if (b.getBuildingId().equals(buildingId)) {
-                    selectedBuilding = b;
+                    chosenBuilding = b;
                     break;
                 }
             }
         }
+        final Building selectedBuilding = chosenBuilding;
 
-        List<Resident> residents = residentRepository.findByBuildingBuildingId(selectedBuilding.getBuildingId());
-        List<OwnerHouseholdUsageDTO> list = new ArrayList<>();
-        double totalUnits = 0.0;
-        int count = 0;
+        // Fetch billing cycles for this building
+        List<BillingCycle> cycles = billingCycleRepository.findByBuildingBuildingIdOrderByStartDateDesc(selectedBuilding.getBuildingId());
+        BillingCycle selectedCycle = null;
+        if (billingCycleId != null) {
+            selectedCycle = cycles.stream().filter(c -> c.getId().equals(billingCycleId)).findFirst().orElse(null);
+        }
+        if (selectedCycle == null && !cycles.isEmpty()) {
+            selectedCycle = cycles.get(0);
+        }
+        Long targetCycleId = selectedCycle != null ? selectedCycle.getId() : null;
+        String cycleMonth = selectedCycle != null 
+                ? (selectedCycle.getBillingMonth() != null ? selectedCycle.getBillingMonth().toString().substring(0, 7) : selectedCycle.getStartDate().toString()) 
+                : "N/A";
 
-        for (Resident r : residents) {
-            WaterMeter m = meterRepository.findByResidentResidentId(r.getResidentId()).orElse(null);
-            double units = 0.0;
-            String meterNum = "N/A";
-            if (m != null) {
-                meterNum = m.getMeterNumber();
-                List<WaterUsage> usageList = usageRepository.findByMeterMeterIdOrderByYearDescMonthDesc(m.getMeterId());
-                if (!usageList.isEmpty()) {
-                    units = usageList.get(0).getUnitsConsumed();
+        // Pre-fetch cycle usages map if cycle is available
+        Map<Long, Double> cycleUsageMap = new HashMap<>();
+        if (targetCycleId != null) {
+            List<WaterUsage> cycleUsages = usageRepository.findByBillingCycleId(targetCycleId);
+            for (WaterUsage u : cycleUsages) {
+                if (u.getMeter() != null && u.getUnitsConsumed() != null) {
+                    cycleUsageMap.put(u.getMeter().getMeterId(), u.getUnitsConsumed());
                 }
             }
-            totalUnits += units;
-            count++;
-
-            list.add(OwnerHouseholdUsageDTO.builder()
-                    .residentId(r.getResidentId())
-                    .apartmentNumber(r.getApartmentNumber())
-                    .residentName(r.getName())
-                    .meterNumber(meterNum)
-                    .unitsConsumed(units)
-                    .build());
         }
 
-        double bAvg = count > 0 ? Math.round((totalUnits / count) * 100.0) / 100.0 : 0.0;
+        // 1. Fetch configured apartments for this building
+        List<Apartment> apartments = apartmentRepository.findByBuildingBuildingIdOrderByFloorNumberAscRoomNumberAsc(selectedBuilding.getBuildingId());
+        List<WaterMeter> meters = meterRepository.findByBuildingBuildingId(selectedBuilding.getBuildingId());
+        List<Resident> residents = residentRepository.findByBuildingBuildingId(selectedBuilding.getBuildingId());
+
+        List<OwnerHouseholdUsageDTO> list = new ArrayList<>();
+        double totalUnits = 0.0;
+        int activeCount = 0;
+
+        if (!apartments.isEmpty()) {
+            for (Apartment apt : apartments) {
+                // Find meter for this apartment
+                WaterMeter m = meters.stream()
+                        .filter(wm -> wm.getApartment() != null && wm.getApartment().getApartmentId().equals(apt.getApartmentId()))
+                        .findFirst()
+                        .orElseGet(() -> meters.stream()
+                                .filter(wm -> wm.getMeterNumber() != null && (wm.getMeterNumber().endsWith("-" + apt.getRoomNumber()) || wm.getMeterNumber().equalsIgnoreCase("WM-" + selectedBuilding.getBuildingNumber() + "-" + apt.getRoomNumber())))
+                                .findFirst()
+                                .orElse(null));
+
+                // Find resident for this apartment
+                Resident r = null;
+                if (m != null && m.getResident() != null) {
+                    r = m.getResident();
+                } else {
+                    r = residents.stream()
+                            .filter(res -> apt.getRoomNumber().equalsIgnoreCase(res.getApartmentNumber()))
+                            .findFirst()
+                            .orElse(null);
+                }
+
+                String meterNum = m != null ? m.getMeterNumber() : ("WM-" + selectedBuilding.getBuildingNumber() + "-" + apt.getRoomNumber());
+                String residentName = r != null ? r.getName() : "Vacant / Unoccupied";
+                Long residentId = r != null ? r.getResidentId() : null;
+
+                double units = 0.0;
+                if (m != null) {
+                    if (cycleUsageMap.containsKey(m.getMeterId())) {
+                        units = cycleUsageMap.get(m.getMeterId());
+                    } else if (targetCycleId == null) {
+                        List<WaterUsage> uList = usageRepository.findByMeterMeterIdOrderByYearDescMonthDesc(m.getMeterId());
+                        if (!uList.isEmpty() && uList.get(0).getUnitsConsumed() != null) {
+                            units = uList.get(0).getUnitsConsumed();
+                        }
+                    }
+                }
+
+                if (units > 0.0) {
+                    activeCount++;
+                }
+                totalUnits += units;
+
+                list.add(OwnerHouseholdUsageDTO.builder()
+                        .residentId(residentId)
+                        .apartmentId(apt.getApartmentId())
+                        .floorNumber(apt.getFloorNumber())
+                        .apartmentNumber(apt.getRoomNumber())
+                        .residentName(residentName)
+                        .meterNumber(meterNum)
+                        .unitsConsumed(units)
+                        .isOccupied(r != null)
+                        .build());
+            }
+        } else {
+            // Fallback to residents if apartments have not been initialized yet
+            for (Resident r : residents) {
+                WaterMeter m = meterRepository.findByResidentResidentId(r.getResidentId()).orElse(null);
+                double units = 0.0;
+                String meterNum = "N/A";
+                if (m != null) {
+                    meterNum = m.getMeterNumber();
+                    if (cycleUsageMap.containsKey(m.getMeterId())) {
+                        units = cycleUsageMap.get(m.getMeterId());
+                    } else {
+                        List<WaterUsage> usageList = usageRepository.findByMeterMeterIdOrderByYearDescMonthDesc(m.getMeterId());
+                        if (!usageList.isEmpty() && usageList.get(0).getUnitsConsumed() != null) {
+                            units = usageList.get(0).getUnitsConsumed();
+                        }
+                    }
+                }
+                if (units > 0.0) {
+                    activeCount++;
+                }
+                totalUnits += units;
+
+                list.add(OwnerHouseholdUsageDTO.builder()
+                        .residentId(r.getResidentId())
+                        .apartmentNumber(r.getApartmentNumber())
+                        .residentName(r.getName())
+                        .meterNumber(meterNum)
+                        .unitsConsumed(units)
+                        .isOccupied(true)
+                        .build());
+            }
+        }
+
+        // Calculate building average based on active consuming apartments if available, else count
+        int denom = activeCount > 0 ? activeCount : (list.isEmpty() ? 1 : list.size());
+        double bAvg = denom > 0 ? Math.round((totalUnits / denom) * 100.0) / 100.0 : 0.0;
 
         for (OwnerHouseholdUsageDTO item : list) {
             item.setApartmentAverage(bAvg);
@@ -696,6 +845,10 @@ public class ResidentService {
                 .buildingId(selectedBuilding.getBuildingId())
                 .buildingName(selectedBuilding.getBuildingName())
                 .buildingAverage(bAvg)
+                .billingCycleId(targetCycleId)
+                .billingMonth(cycleMonth)
+                .totalApartments(list.size())
+                .activeApartments(activeCount)
                 .households(list)
                 .build();
     }

@@ -45,6 +45,7 @@ export default function ResidentDashboard() {
   const [moveOutConfirm, setMoveOutConfirm] = useState(false);
   const [moveOutSubmitting, setMoveOutSubmitting] = useState(false);
   const [moveOutError, setMoveOutError] = useState('');
+  const [pendingBillsWarning, setPendingBillsWarning] = useState(null); // { count: number, total: number }
 
   // Toast / Status Message
   const [statusAlert, setStatusAlert] = useState(null); // { type: 'success' | 'info' | 'danger', message: '' }
@@ -183,6 +184,27 @@ export default function ResidentDashboard() {
     }
   };
 
+  const handleOpenMoveOut = async () => {
+    setMoveOutConfirm(false);
+    setMoveOutError('');
+    setPendingBillsWarning(null);
+    setShowMoveOutModal(true);
+
+    try {
+      const billsRes = await API.get('/resident/bills');
+      const unpaid = (billsRes.data || []).filter(b => b.status !== 'PAID');
+      if (unpaid.length > 0) {
+        const totalDue = unpaid.reduce((sum, b) => sum + (b.amount || 0), 0);
+        setPendingBillsWarning({
+          count: unpaid.length,
+          total: totalDue
+        });
+      }
+    } catch (err) {
+      console.error('Failed to verify resident bills before move-out:', err);
+    }
+  };
+
   const handleMoveOutSubmit = async (e) => {
     e.preventDefault();
     if (!moveOutConfirm) {
@@ -280,11 +302,7 @@ export default function ResidentDashboard() {
                 </Link>
                 <button
                   className="btn btn-outline-danger fw-semibold"
-                  onClick={() => {
-                    setMoveOutConfirm(false);
-                    setMoveOutError('');
-                    setShowMoveOutModal(true);
-                  }}
+                  onClick={handleOpenMoveOut}
                   title="End active occupancy and vacate unit"
                 >
                   <i className="bi bi-box-arrow-right me-1.5"></i> Move Out
@@ -911,6 +929,24 @@ export default function ResidentDashboard() {
                     </div>
                   </div>
 
+                  {pendingBillsWarning && (
+                    <div className="alert alert-danger p-3 rounded-3 mb-3 border-danger shadow-xs">
+                      <div className="d-flex align-items-start gap-2">
+                        <i className="bi bi-exclamation-octagon-fill fs-5 text-danger flex-shrink-0 mt-0.5"></i>
+                        <div>
+                          <div className="fw-bold text-danger mb-1">Cannot Vacate: Outstanding Bills Detected</div>
+                          <div className="small text-dark mb-2">
+                            You currently have <strong>{pendingBillsWarning.count} pending bill(s)</strong> totaling <strong className="text-danger">₹{pendingBillsWarning.total.toFixed(2)}</strong>.
+                            You cannot leave the apartment until all outstanding water charges are cleared in full.
+                          </div>
+                          <Link to="/resident/bills" className="btn btn-sm btn-danger fw-bold" onClick={() => setShowMoveOutModal(false)}>
+                            <i className="bi bi-wallet2 me-1"></i> Pay Pending Bills Now
+                          </Link>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
                   <div className="alert alert-warning py-2.5 px-3 fs-8 rounded-3 mb-3">
                     <i className="bi bi-info-circle-fill me-1.5"></i>
                     <strong>What happens when you move out:</strong>
@@ -928,6 +964,7 @@ export default function ResidentDashboard() {
                       className="form-select form-select-sm"
                       value={moveOutReason}
                       onChange={(e) => setMoveOutReason(e.target.value)}
+                      disabled={!!pendingBillsWarning}
                     >
                       <option value="Relocation">Job / City Relocation</option>
                       <option value="Lease Term Expired">Lease Term Expired</option>
@@ -944,6 +981,7 @@ export default function ResidentDashboard() {
                       id="confirmMoveOutCheck"
                       checked={moveOutConfirm}
                       onChange={(e) => setMoveOutConfirm(e.target.checked)}
+                      disabled={!!pendingBillsWarning}
                       required
                     />
                     <label className="form-check-label fs-7 fw-semibold text-danger" htmlFor="confirmMoveOutCheck">
@@ -956,13 +994,14 @@ export default function ResidentDashboard() {
                   <button type="button" className="btn btn-light" onClick={() => setShowMoveOutModal(false)} disabled={moveOutSubmitting}>
                     Cancel
                   </button>
-                  <button type="submit" className="btn btn-danger fw-bold px-3" disabled={moveOutSubmitting || !moveOutConfirm}>
+                  <button type="submit" className="btn btn-danger fw-bold px-3" disabled={moveOutSubmitting || !moveOutConfirm || !!pendingBillsWarning}>
                     {moveOutSubmitting ? (
                       <span><span className="spinner-border spinner-border-sm me-1"></span>Processing...</span>
                     ) : (
                       <span><i className="bi bi-box-arrow-right me-1"></i> Confirm & Vacate Unit</span>
                     )}
                   </button>
+
                 </div>
               </form>
             </div>

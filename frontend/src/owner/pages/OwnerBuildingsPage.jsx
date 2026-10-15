@@ -23,7 +23,9 @@ export default function OwnerBuildingsPage() {
   const [unitFormData, setUnitFormData] = useState({
     floorNumber: 1,
     unitType: '2BHK',
-    roomNumbers: ''
+    roomNumbers: '',
+    meterPrefix: '',
+    customMeters: {}
   });
   const [unitError, setUnitError] = useState('');
   const [unitSuccess, setUnitSuccess] = useState('');
@@ -31,6 +33,9 @@ export default function OwnerBuildingsPage() {
   const [generatingUnits, setGeneratingUnits] = useState(false);
   const [actionLoadingId, setActionLoadingId] = useState(null);
   const [residentInfoModal, setResidentInfoModal] = useState(null);
+  const [editingMeterApt, setEditingMeterApt] = useState(null);
+  const [editingMeterNumber, setEditingMeterNumber] = useState('');
+  const [updatingMeter, setUpdatingMeter] = useState(false);
 
   const fetchBuildings = () => {
     API.get('/owners/buildings')
@@ -78,6 +83,13 @@ export default function OwnerBuildingsPage() {
     setUnitSuccess('');
     setShowAddUnitsForm(false);
     setRoomFilter('ALL');
+    setUnitFormData({
+      floorNumber: 1,
+      unitType: '2BHK',
+      roomNumbers: '',
+      meterPrefix: `WM-${building.buildingNumber}-`,
+      customMeters: {}
+    });
     try {
       const res = await API.get(`/owners/buildings/${building.buildingId}/apartments`);
       setInventory(res.data);
@@ -219,16 +231,30 @@ export default function OwnerBuildingsPage() {
       return;
     }
 
+    const prefix = unitFormData.meterPrefix?.trim() || `WM-${selectedBuilding.buildingNumber}-`;
+    const roomMeters = rooms.map(room => ({
+      roomNumber: room,
+      meterNumber: unitFormData.customMeters?.[room]?.trim() || (prefix.endsWith('-') ? `${prefix}${room}` : `${prefix}-${room}`)
+    }));
+
     try {
       await API.post(`/owners/buildings/${selectedBuilding.buildingId}/floors/batch-apartments`, {
         buildingId: selectedBuilding.buildingId,
         floorNumber: parseInt(unitFormData.floorNumber),
         unitType: unitFormData.unitType,
-        roomNumbers: rooms
+        roomNumbers: rooms,
+        meterPrefix: prefix,
+        roomMeters: roomMeters
       });
 
-      setUnitSuccess(`✓ Successfully configured ${rooms.length} unit(s) on Floor ${unitFormData.floorNumber}.`);
-      setUnitFormData({ floorNumber: unitFormData.floorNumber, unitType: unitFormData.unitType, roomNumbers: '' });
+      setUnitSuccess(`✓ Successfully configured ${rooms.length} unit(s) with dedicated Water Meter IDs on Floor ${unitFormData.floorNumber}.`);
+      setUnitFormData({
+        floorNumber: unitFormData.floorNumber,
+        unitType: unitFormData.unitType,
+        roomNumbers: '',
+        meterPrefix: prefix,
+        customMeters: {}
+      });
       setShowAddUnitsForm(false);
 
       // Refresh inventory
@@ -236,6 +262,28 @@ export default function OwnerBuildingsPage() {
       setInventory(res.data);
     } catch (err) {
       setUnitError(err.response?.data?.message || 'Failed to add apartments. Some room numbers may already exist.');
+    }
+  };
+
+  const handleSaveMeter = async (e) => {
+    e.preventDefault();
+    if (!editingMeterApt || !editingMeterNumber.trim()) return;
+    setUpdatingMeter(true);
+    setUnitError('');
+    setUnitSuccess('');
+    try {
+      await API.put(`/owners/apartments/${editingMeterApt.apartmentId}/meter`, {
+        meterNumber: editingMeterNumber.trim()
+      });
+      setUnitSuccess(`✓ Meter for Unit ${editingMeterApt.roomNumber} updated to "${editingMeterNumber.trim()}".`);
+      setEditingMeterApt(null);
+      // Refresh inventory
+      const res = await API.get(`/owners/buildings/${selectedBuilding.buildingId}/apartments`);
+      setInventory(res.data);
+    } catch (err) {
+      alert(err.response?.data?.message || 'Failed to update meter.');
+    } finally {
+      setUpdatingMeter(false);
     }
   };
 
@@ -456,11 +504,20 @@ export default function OwnerBuildingsPage() {
 
                     {/* Expandable Add Units Form */}
                     {showAddUnitsForm && (
-                      <div className="card p-3 border rounded-3 mb-4 bg-light">
-                        <h6 className="fw-bold text-dark mb-2">Configure Apartments / Units</h6>
+                      <div className="card p-3 border rounded-3 mb-4 bg-light shadow-sm">
+                        <div className="d-flex align-items-center justify-content-between mb-2">
+                          <h6 className="fw-bold text-dark mb-0">
+                            <i className="bi bi-plus-circle me-1.5 text-primary"></i>
+                            Configure Floor Units & Water Meters
+                          </h6>
+                          <span className="badge bg-white text-muted border fs-9">Batch Setup</span>
+                        </div>
+                        <p className="text-muted fs-8 mb-3">
+                          Each room will automatically receive a unique numeric <strong>Meter ID (#)</strong> for CSV billing uploads, along with a customizable <strong>Meter Number / Serial</strong>.
+                        </p>
                         <form onSubmit={handleAddUnits}>
                           <div className="row g-3">
-                            <div className="col-md-3">
+                            <div className="col-md-2">
                               <label className="form-label fs-8 fw-semibold text-dark">Floor Number *</label>
                               <input
                                 type="number"
@@ -486,6 +543,16 @@ export default function OwnerBuildingsPage() {
                                 <option value="Penthouse">Penthouse</option>
                               </select>
                             </div>
+                            <div className="col-md-3">
+                              <label className="form-label fs-8 fw-semibold text-dark">Meter Prefix / Format</label>
+                              <input
+                                type="text"
+                                className="form-control form-control-sm"
+                                placeholder={`WM-${selectedBuilding?.buildingNumber || 'BLDG'}-`}
+                                value={unitFormData.meterPrefix}
+                                onChange={e => setUnitFormData({...unitFormData, meterPrefix: e.target.value})}
+                              />
+                            </div>
                             <div className="col-md-4">
                               <label className="form-label fs-8 fw-semibold text-dark">
                                 Room Numbers (Comma separated) *
@@ -493,15 +560,75 @@ export default function OwnerBuildingsPage() {
                               <input
                                 type="text"
                                 className="form-control form-control-sm"
-                                placeholder="e.g. 101, 102, 103"
+                                placeholder="e.g. 101, 102, 103, 104"
                                 value={unitFormData.roomNumbers}
                                 onChange={e => setUnitFormData({...unitFormData, roomNumbers: e.target.value})}
                                 required
                               />
                             </div>
-                            <div className="col-md-2 d-flex align-items-end">
-                              <button type="submit" className="btn btn-sm btn-dark w-100 fw-bold py-1.5">
-                                Save Units
+
+                            {/* Live Room-to-Meter Mapping Preview */}
+                            {unitFormData.roomNumbers.trim().length > 0 && (
+                              <div className="col-12 mt-1">
+                                <div className="p-2.5 rounded-3 bg-white border">
+                                  <div className="d-flex align-items-center justify-content-between mb-2">
+                                    <span className="fs-8 fw-bold text-dark">
+                                      <i className="bi bi-speedometer2 me-1 text-primary"></i>
+                                      Meter ID & Number Assignment Preview
+                                    </span>
+                                    <small className="text-muted fs-9">Customize meter serial numbers below if needed</small>
+                                  </div>
+                                  <div className="row g-2">
+                                    {unitFormData.roomNumbers.split(',').map(s => s.trim()).filter(Boolean).map(r => {
+                                      const defaultMNum = `${unitFormData.meterPrefix || `WM-${selectedBuilding.buildingNumber}-`}${r}`;
+                                      const currentVal = unitFormData.customMeters?.[r] ?? defaultMNum;
+                                      return (
+                                        <div className="col-sm-6 col-md-4 col-lg-3" key={r}>
+                                          <div className="p-2 border rounded-2 bg-light d-flex flex-column gap-1">
+                                            <div className="d-flex align-items-center justify-content-between">
+                                              <strong className="fs-8 text-dark">Unit {r}</strong>
+                                              <span className="badge bg-primary-subtle text-primary border border-primary-subtle fs-9">
+                                                Meter ID: Auto (#)
+                                              </span>
+                                            </div>
+                                            <div className="input-group input-group-sm">
+                                              <span className="input-group-text px-1.5 fs-9 text-muted"><i className="bi bi-hash"></i></span>
+                                              <input
+                                                type="text"
+                                                className="form-control form-control-sm fs-8 py-0.5"
+                                                value={currentVal}
+                                                onChange={ev => {
+                                                  const val = ev.target.value;
+                                                  setUnitFormData(prev => ({
+                                                    ...prev,
+                                                    customMeters: {
+                                                      ...prev.customMeters,
+                                                      [r]: val
+                                                    }
+                                                  }));
+                                                }}
+                                                placeholder={defaultMNum}
+                                              />
+                                            </div>
+                                          </div>
+                                        </div>
+                                      );
+                                    })}
+                                  </div>
+                                </div>
+                              </div>
+                            )}
+
+                            <div className="col-12 d-flex justify-content-end gap-2 pt-1">
+                              <button
+                                type="button"
+                                className="btn btn-sm btn-light border px-3"
+                                onClick={() => setShowAddUnitsForm(false)}
+                              >
+                                Cancel
+                              </button>
+                              <button type="submit" className="btn btn-sm btn-dark px-4 fw-bold">
+                                Save Units & Water Meters
                               </button>
                             </div>
                           </div>
@@ -569,7 +696,36 @@ export default function OwnerBuildingsPage() {
 
                                           <div className="fs-8 text-muted mb-1">
                                             Type: <span className="fw-semibold text-dark">{apt.unitType || 'Flat'}</span>
-                                            {apt.meterNumber && <span className="ms-1.5">• <code>{apt.meterNumber}</code></span>}
+                                          </div>
+
+                                          {/* Meter ID & Number Fixture Card */}
+                                          <div className="d-flex align-items-center justify-content-between p-1.5 rounded-2 bg-white border border-light-subtle my-1.5 shadow-2xs">
+                                            <div className="d-flex align-items-center gap-1.5 text-truncate">
+                                              <div className="rounded-circle bg-primary-subtle p-1 d-flex align-items-center justify-content-center text-primary" style={{ width: 22, height: 22, fontSize: '0.75rem' }}>
+                                                <i className="bi bi-speedometer2"></i>
+                                              </div>
+                                              <div className="text-truncate">
+                                                <div className="d-flex align-items-center gap-1">
+                                                  <span className="badge bg-primary text-white fw-bold px-1.5 py-0.5 fs-9" title="Meter ID used in Bulk Billing CSV">
+                                                    ID: #{apt.meterId || 'N/A'}
+                                                  </span>
+                                                  <code className="text-dark fw-bold fs-9 text-truncate" title="Assigned Meter Number">
+                                                    {apt.meterNumber || 'Unassigned'}
+                                                  </code>
+                                                </div>
+                                              </div>
+                                            </div>
+                                            <button
+                                              type="button"
+                                              className="btn btn-outline-secondary btn-xs py-0.5 px-1.5 border-0 text-muted"
+                                              title="Configure or edit water meter for this unit"
+                                              onClick={() => {
+                                                setEditingMeterApt(apt);
+                                                setEditingMeterNumber(apt.meterNumber || `WM-${selectedBuilding.buildingNumber}-${apt.roomNumber}`);
+                                              }}
+                                            >
+                                              <i className="bi bi-pencil-square"></i>
+                                            </button>
                                           </div>
 
                                           {isOccupied && apt.currentResidentName && (
@@ -844,14 +1000,19 @@ export default function OwnerBuildingsPage() {
                     <i className="bi bi-droplet-half me-1.5 text-primary"></i>
                     Smart Water Meter Fixture
                   </h6>
-                  <div className="p-2.5 rounded-2 bg-light d-flex align-items-center justify-content-between">
+                  <div className="p-2.5 rounded-2 bg-light d-flex align-items-center justify-content-between flex-wrap gap-2">
                     <div>
-                      <div className="fs-9 text-muted">Meter Serial Number</div>
+                      <div className="d-flex align-items-center gap-1.5 mb-1">
+                        <span className="badge bg-primary text-white fs-8 px-2 py-0.5" title="Meter ID used in CSV bulk billing uploads">
+                          Meter ID: #{residentInfoModal.meterId || 'Auto'}
+                        </span>
+                        <span className="badge bg-success-subtle text-success border border-success-subtle px-2 py-0.5 fs-9">
+                          <i className="bi bi-broadcast me-1"></i>Active Telemetry
+                        </span>
+                      </div>
+                      <div className="fs-9 text-muted">Meter Hardware Serial / Number</div>
                       <code className="fs-7 fw-bold text-primary">{residentInfoModal.meterNumber || 'Pending Configuration'}</code>
                     </div>
-                    <span className="badge bg-success-subtle text-success border border-success-subtle px-2 py-1 fs-9">
-                      <i className="bi bi-broadcast me-1"></i>Active Telemetry
-                    </span>
                   </div>
                 </div>
               </div>
@@ -883,6 +1044,65 @@ export default function OwnerBuildingsPage() {
                   Close
                 </button>
               </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal 4: Edit Meter ID & Number */}
+      {editingMeterApt && (
+        <div className="modal show d-block" style={{ backgroundColor: 'rgba(0,0,0,0.5)', zIndex: 1070 }}>
+          <div className="modal-dialog modal-dialog-centered">
+            <div className="modal-content border-0 shadow-lg rounded-4 overflow-hidden">
+              <div className="modal-header border-0 pb-0">
+                <div className="d-flex align-items-center gap-2">
+                  <div className="rounded-circle bg-primary-subtle text-primary p-2 d-flex align-items-center justify-content-center" style={{ width: 40, height: 40 }}>
+                    <i className="bi bi-speedometer2 fs-5"></i>
+                  </div>
+                  <div>
+                    <h5 className="modal-title fw-bold text-dark">Configure Unit Meter</h5>
+                    <p className="text-muted fs-8 mb-0">Unit {editingMeterApt.roomNumber} • {selectedBuilding?.buildingName}</p>
+                  </div>
+                </div>
+                <button type="button" className="btn-close" onClick={() => setEditingMeterApt(null)}></button>
+              </div>
+              <form onSubmit={handleSaveMeter}>
+                <div className="modal-body">
+                  <div className="p-3 rounded-3 bg-light border mb-3">
+                    <div className="d-flex align-items-center justify-content-between mb-1">
+                      <span className="fs-8 fw-semibold text-muted">Database Meter ID:</span>
+                      <span className="badge bg-primary text-white fs-7 px-2 py-1">
+                        #{editingMeterApt.meterId || 'Auto'}
+                      </span>
+                    </div>
+                    <small className="text-muted fs-9 d-block">
+                      <i className="bi bi-info-circle me-1"></i>
+                      Use this Meter ID <strong>(#{editingMeterApt.meterId})</strong> in your CSV reading upload file.
+                    </small>
+                  </div>
+
+                  <div className="mb-3">
+                    <label className="form-label fw-semibold fs-7 text-dark">Meter Number / Hardware Serial *</label>
+                    <input
+                      type="text"
+                      className="form-control"
+                      value={editingMeterNumber}
+                      onChange={e => setEditingMeterNumber(e.target.value)}
+                      placeholder={`WM-${selectedBuilding?.buildingNumber}-${editingMeterApt.roomNumber}`}
+                      required
+                    />
+                    <small className="text-muted fs-9">
+                      This is the readable serial code printed on the physical water meter.
+                    </small>
+                  </div>
+                </div>
+                <div className="modal-footer border-0">
+                  <button type="button" className="btn btn-light" onClick={() => setEditingMeterApt(null)}>Cancel</button>
+                  <button type="submit" className="btn btn-dark px-4 fw-bold" disabled={updatingMeter}>
+                    {updatingMeter ? 'Saving...' : 'Save Meter'}
+                  </button>
+                </div>
+              </form>
             </div>
           </div>
         </div>

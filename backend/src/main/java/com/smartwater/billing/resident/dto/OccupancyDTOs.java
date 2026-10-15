@@ -93,6 +93,7 @@ public class OccupancyDTOs {
         private String buildingNumber;
         private String buildingLocation;
         private String ownerName;
+        private Long meterId;
         private String meterNumber;
         private LocalDateTime startDate;
         private LocalDateTime endDate;
@@ -134,6 +135,9 @@ public class OccupancyDTOs {
         public String getOwnerName() { return ownerName; }
         public void setOwnerName(String ownerName) { this.ownerName = ownerName; }
 
+        public Long getMeterId() { return meterId; }
+        public void setMeterId(Long meterId) { this.meterId = meterId; }
+
         public String getMeterNumber() { return meterNumber; }
         public void setMeterNumber(String meterNumber) { this.meterNumber = meterNumber; }
 
@@ -163,6 +167,7 @@ public class OccupancyDTOs {
             private String buildingNumber;
             private String buildingLocation;
             private String ownerName;
+            private Long meterId;
             private String meterNumber;
             private LocalDateTime startDate;
             private LocalDateTime endDate;
@@ -180,6 +185,7 @@ public class OccupancyDTOs {
             public Builder buildingNumber(String n) { this.buildingNumber = n; return this; }
             public Builder buildingLocation(String l) { this.buildingLocation = l; return this; }
             public Builder ownerName(String n) { this.ownerName = n; return this; }
+            public Builder meterId(Long id) { this.meterId = id; return this; }
             public Builder meterNumber(String m) { this.meterNumber = m; return this; }
             public Builder startDate(LocalDateTime d) { this.startDate = d; return this; }
             public Builder endDate(LocalDateTime d) { this.endDate = d; return this; }
@@ -199,6 +205,7 @@ public class OccupancyDTOs {
                 r.setBuildingNumber(buildingNumber);
                 r.setBuildingLocation(buildingLocation);
                 r.setOwnerName(ownerName);
+                r.setMeterId(meterId);
                 r.setMeterNumber(meterNumber);
                 r.setStartDate(startDate);
                 r.setEndDate(endDate);
@@ -258,6 +265,7 @@ public class OccupancyDTOs {
         private String roomNumber;
         private String unitType;
         private String description;
+        private Long meterId;
         private String meterNumber;
 
         public AvailableApartmentResponse() {}
@@ -292,6 +300,9 @@ public class OccupancyDTOs {
         public String getDescription() { return description; }
         public void setDescription(String description) { this.description = description; }
 
+        public Long getMeterId() { return meterId; }
+        public void setMeterId(Long meterId) { this.meterId = meterId; }
+
         public String getMeterNumber() { return meterNumber; }
         public void setMeterNumber(String meterNumber) { this.meterNumber = meterNumber; }
 
@@ -308,6 +319,7 @@ public class OccupancyDTOs {
             private String roomNumber;
             private String unitType;
             private String description;
+            private Long meterId;
             private String meterNumber;
 
             public Builder apartmentId(Long id) { this.apartmentId = id; return this; }
@@ -320,6 +332,7 @@ public class OccupancyDTOs {
             public Builder roomNumber(String r) { this.roomNumber = r; return this; }
             public Builder unitType(String t) { this.unitType = t; return this; }
             public Builder description(String d) { this.description = d; return this; }
+            public Builder meterId(Long id) { this.meterId = id; return this; }
             public Builder meterNumber(String m) { this.meterNumber = m; return this; }
 
             public AvailableApartmentResponse build() {
@@ -334,6 +347,7 @@ public class OccupancyDTOs {
                 r.setRoomNumber(roomNumber);
                 r.setUnitType(unitType);
                 r.setDescription(description);
+                r.setMeterId(meterId);
                 r.setMeterNumber(meterNumber);
                 return r;
             }
@@ -516,6 +530,7 @@ public class OccupancyDTOs {
         private String location;
         private Integer totalFlats;
         private int vacantCount;
+        private String ownerName;
 
         public PublicBuildingResponse() {}
 
@@ -526,6 +541,16 @@ public class OccupancyDTOs {
             this.location = location;
             this.totalFlats = totalFlats;
             this.vacantCount = vacantCount;
+        }
+
+        public PublicBuildingResponse(Long buildingId, String buildingName, String buildingNumber, String location, Integer totalFlats, int vacantCount, String ownerName) {
+            this.buildingId = buildingId;
+            this.buildingName = buildingName;
+            this.buildingNumber = buildingNumber;
+            this.location = location;
+            this.totalFlats = totalFlats;
+            this.vacantCount = vacantCount;
+            this.ownerName = ownerName;
         }
 
         public Long getBuildingId() { return buildingId; }
@@ -545,5 +570,8 @@ public class OccupancyDTOs {
 
         public int getVacantCount() { return vacantCount; }
         public void setVacantCount(int vacantCount) { this.vacantCount = vacantCount; }
+
+        public String getOwnerName() { return ownerName; }
+        public void setOwnerName(String ownerName) { this.ownerName = ownerName; }
     }
 }

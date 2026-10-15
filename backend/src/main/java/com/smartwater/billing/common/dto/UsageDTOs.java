@@ -52,9 +52,13 @@ public class UsageDTOs {
         private Long usageId;
         private Long meterId;
         private String meterNumber;
+        private Long buildingId;
+        private String buildingName;
+        private String apartmentNumber;
         private Long residentId;
         private String residentName;
         private Long billingCycleId;
+        private String cycleName;
         private Integer month;
         private Integer year;
         private Double previousReading;
@@ -65,12 +69,20 @@ public class UsageDTOs {
 
         public UsageResponse() {}
         public UsageResponse(Long usageId, Long meterId, String meterNumber, Long residentId, String residentName, Long billingCycleId, Integer month, Integer year, Double previousReading, Double currentReading, Double unitsConsumed, String anomalyStatus, LocalDateTime recordedAt) {
+            this(usageId, meterId, meterNumber, null, null, null, residentId, residentName, billingCycleId, null, month, year, previousReading, currentReading, unitsConsumed, anomalyStatus, recordedAt);
+        }
+
+        public UsageResponse(Long usageId, Long meterId, String meterNumber, Long buildingId, String buildingName, String apartmentNumber, Long residentId, String residentName, Long billingCycleId, String cycleName, Integer month, Integer year, Double previousReading, Double currentReading, Double unitsConsumed, String anomalyStatus, LocalDateTime recordedAt) {
             this.usageId = usageId;
             this.meterId = meterId;
             this.meterNumber = meterNumber;
+            this.buildingId = buildingId;
+            this.buildingName = buildingName;
+            this.apartmentNumber = apartmentNumber;
             this.residentId = residentId;
             this.residentName = residentName;
             this.billingCycleId = billingCycleId;
+            this.cycleName = cycleName;
             this.month = month;
             this.year = year;
             this.previousReading = previousReading;
@@ -89,6 +101,15 @@ public class UsageDTOs {
         public String getMeterNumber() { return meterNumber; }
         public void setMeterNumber(String meterNumber) { this.meterNumber = meterNumber; }
 
+        public Long getBuildingId() { return buildingId; }
+        public void setBuildingId(Long buildingId) { this.buildingId = buildingId; }
+
+        public String getBuildingName() { return buildingName; }
+        public void setBuildingName(String buildingName) { this.buildingName = buildingName; }
+
+        public String getApartmentNumber() { return apartmentNumber; }
+        public void setApartmentNumber(String apartmentNumber) { this.apartmentNumber = apartmentNumber; }
+
         public Long getResidentId() { return residentId; }
         public void setResidentId(Long residentId) { this.residentId = residentId; }
 
@@ -97,6 +118,9 @@ public class UsageDTOs {
 
         public Long getBillingCycleId() { return billingCycleId; }
         public void setBillingCycleId(Long billingCycleId) { this.billingCycleId = billingCycleId; }
+
+        public String getCycleName() { return cycleName; }
+        public void setCycleName(String cycleName) { this.cycleName = cycleName; }
 
         public Integer getMonth() { return month; }
         public void setMonth(Integer month) { this.month = month; }
@@ -125,9 +149,13 @@ public class UsageDTOs {
             private Long usageId;
             private Long meterId;
             private String meterNumber;
+            private Long buildingId;
+            private String buildingName;
+            private String apartmentNumber;
             private Long residentId;
             private String residentName;
             private Long billingCycleId;
+            private String cycleName;
             private Integer month;
             private Integer year;
             private Double previousReading;
@@ -139,9 +167,13 @@ public class UsageDTOs {
             public Builder usageId(Long usageId) { this.usageId = usageId; return this; }
             public Builder meterId(Long meterId) { this.meterId = meterId; return this; }
             public Builder meterNumber(String meterNumber) { this.meterNumber = meterNumber; return this; }
+            public Builder buildingId(Long buildingId) { this.buildingId = buildingId; return this; }
+            public Builder buildingName(String buildingName) { this.buildingName = buildingName; return this; }
+            public Builder apartmentNumber(String apartmentNumber) { this.apartmentNumber = apartmentNumber; return this; }
             public Builder residentId(Long residentId) { this.residentId = residentId; return this; }
             public Builder residentName(String residentName) { this.residentName = residentName; return this; }
             public Builder billingCycleId(Long billingCycleId) { this.billingCycleId = billingCycleId; return this; }
+            public Builder cycleName(String cycleName) { this.cycleName = cycleName; return this; }
             public Builder month(Integer month) { this.month = month; return this; }
             public Builder year(Integer year) { this.year = year; return this; }
             public Builder previousReading(Double previousReading) { this.previousReading = previousReading; return this; }
@@ -151,7 +183,7 @@ public class UsageDTOs {
             public Builder recordedAt(LocalDateTime recordedAt) { this.recordedAt = recordedAt; return this; }
 
             public UsageResponse build() {
-                return new UsageResponse(usageId, meterId, meterNumber, residentId, residentName, billingCycleId, month, year, previousReading, currentReading, unitsConsumed, anomalyStatus, recordedAt);
+                return new UsageResponse(usageId, meterId, meterNumber, buildingId, buildingName, apartmentNumber, residentId, residentName, billingCycleId, cycleName, month, year, previousReading, currentReading, unitsConsumed, anomalyStatus, recordedAt);
             }
         }
     }

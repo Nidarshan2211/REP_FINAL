@@ -32,6 +32,11 @@ public class ApartmentController {
         return ResponseEntity.ok(apartmentService.getOwnerBuildings(ownerId));
     }
 
+    @GetMapping({"/apartments/buildings", "/api/apartments/buildings"})
+    public ResponseEntity<List<PublicBuildingResponse>> getAllPublicBuildings() {
+        return ResponseEntity.ok(apartmentService.getAllPublicBuildings());
+    }
+
     @GetMapping({"/apartments/available", "/api/apartments/available"})
     public ResponseEntity<List<AvailableApartmentResponse>> getAvailableApartments(
             @RequestParam(value = "buildingId", required = false) Long buildingId,
@@ -104,6 +109,16 @@ public class ApartmentController {
     ) {
         apartmentService.cancelInvitation(authentication.getName(), invitationId);
         return ResponseEntity.noContent().build();
+    }
+
+    @PutMapping({"/owners/apartments/{apartmentId}/meter", "/api/owner/apartments/{apartmentId}/meter"})
+    @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'BUILDING_OWNER')")
+    public ResponseEntity<ApartmentResponse> updateApartmentMeter(
+            Authentication authentication,
+            @PathVariable("apartmentId") Long apartmentId,
+            @RequestBody UpdateApartmentMeterRequest request
+    ) {
+        return ResponseEntity.ok(apartmentService.updateApartmentMeter(authentication.getName(), apartmentId, request.getMeterNumber()));
     }
 
     @PostMapping({"/owners/buildings/{buildingId}/generate-default-apartments", "/api/owner/buildings/{buildingId}/generate-default-apartments"})

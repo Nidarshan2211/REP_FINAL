@@ -123,24 +123,52 @@ public class BillingCycleService {
         List<WaterUsage> cycleUsages = new ArrayList<>();
 
         for (Resident resident : residents) {
-            WaterMeter meter = waterMeterRepository.findFirstByResidentResidentId(resident.getResidentId()).orElse(null);
+            WaterMeter meter = waterMeterRepository.findFirstByResidentResidentId(resident.getResidentId())
+                    .or(() -> waterMeterRepository.findByResidentResidentId(resident.getResidentId()))
+                    .orElse(null);
+
             if (meter == null) {
                 String mNum = "WM-" + (cycle.getBuilding() != null ? cycle.getBuilding().getBuildingNumber() : "B-101") + "-" + resident.getApartmentNumber();
-                meter = WaterMeter.builder()
-                        .building(cycle.getBuilding())
-                        .resident(resident)
-                        .meterNumber(mNum)
-                        .installationDate(LocalDate.now())
-                        .status(WaterMeter.MeterStatus.ACTIVE)
-                        .build();
+                meter = waterMeterRepository.findByMeterNumber(mNum).orElse(null);
+                if (meter != null) {
+                    meter.setResident(resident);
+                    meter = waterMeterRepository.save(meter);
+                } else {
+                    meter = WaterMeter.builder()
+                            .building(cycle.getBuilding())
+                            .resident(resident)
+                            .meterNumber(mNum)
+                            .installationDate(LocalDate.now())
+                            .status(WaterMeter.MeterStatus.ACTIVE)
+                            .build();
+                    meter = waterMeterRepository.save(meter);
+                }
+            } else if (meter.getResident() == null) {
+                meter.setResident(resident);
                 meter = waterMeterRepository.save(meter);
             }
 
             Optional<WaterUsage> usageOpt = usageRepository.findTopByMeterMeterIdAndBillingCycleIdOrderByUsageIdDesc(meter.getMeterId(), cycle.getId());
             if (usageOpt.isEmpty()) {
+                usageOpt = usageRepository.findByBillingCycleId(cycle.getId()).stream()
+                        .filter(u -> u.getMeter() != null && (
+                                (u.getMeter().getResident() != null && resident.getResidentId().equals(u.getMeter().getResident().getResidentId())) ||
+                                (u.getMeter().getApartment() != null && resident.getApartmentNumber() != null &&
+                                        (resident.getApartmentNumber().equalsIgnoreCase(u.getMeter().getApartment().getRoomNumber()) ||
+                                         resident.getApartmentNumber().equalsIgnoreCase(u.getMeter().getApartment().getApartmentName())))
+                        ))
+                        .findFirst();
+            }
+
+            if (usageOpt.isEmpty()) {
                 missingResidentNames.add(resident.getName() + " (Apartment " + resident.getApartmentNumber() + ")");
             } else {
-                cycleUsages.add(usageOpt.get());
+                WaterUsage foundUsage = usageOpt.get();
+                if (foundUsage.getMeter() != null && foundUsage.getMeter().getResident() == null) {
+                    foundUsage.getMeter().setResident(resident);
+                    waterMeterRepository.save(foundUsage.getMeter());
+                }
+                cycleUsages.add(foundUsage);
             }
         }
 
@@ -162,7 +190,11 @@ public class BillingCycleService {
         List<NotificationTask> emailTasks = new ArrayList<>();
 
         for (WaterUsage usage : cycleUsages) {
-            Resident resident = usage.getMeter().getResident();
+            Resident resident = usage.getMeter() != null ? usage.getMeter().getResident() : null;
+            if (resident == null) {
+                log.warn("Skipping bill generation for WaterUsage #{} because its meter has no active resident.", usage.getUsageId());
+                continue;
+            }
             BigDecimal units = BigDecimal.valueOf(usage.getUnitsConsumed());
 
             // Progressive 3-Tier Formula Calculation
@@ -298,27 +330,28 @@ public class BillingCycleService {
         billingCycleRepository.save(cycle);
 
         // Dispatches Emails Strictly Post-Commit (Non-blocking and Rollback-Safe)
+        // Dispatches Emails Strictly Post-Commit (Non-blocking and Rollback-Safe)
+        Runnable emailDispatcher = () -> {
+            java.util.concurrent.CompletableFuture.runAsync(() -> {
+                for (NotificationTask task : emailTasks) {
+                    try {
+                        emailService.sendNotificationEmail(task.email, task.name, task.title, task.message);
+                    } catch (Exception e) {
+                        log.warn("Failed to send bill notification email to {}: {}", task.email, e.getMessage());
+                    }
+                }
+            });
+        };
+
         if (TransactionSynchronizationManager.isSynchronizationActive()) {
             TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
                 @Override
                 public void afterCommit() {
-                    for (NotificationTask task : emailTasks) {
-                        try {
-                            emailService.sendNotificationEmail(task.email, task.name, task.title, task.message);
-                        } catch (Exception e) {
-                            log.warn("Failed to send bill notification email to {}: {}", task.email, e.getMessage());
-                        }
-                    }
+                    emailDispatcher.run();
                 }
             });
         } else {
-            for (NotificationTask task : emailTasks) {
-                try {
-                    emailService.sendNotificationEmail(task.email, task.name, task.title, task.message);
-                } catch (Exception e) {
-                    log.warn("Failed to send bill notification email to {}: {}", task.email, e.getMessage());
-                }
-            }
+            emailDispatcher.run();
         }
 
         return cycle;

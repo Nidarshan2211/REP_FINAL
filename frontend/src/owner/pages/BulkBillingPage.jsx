@@ -45,7 +45,7 @@ export default function BulkBillingPage() {
   useEffect(() => {
     if (!selectedBuildingId) return;
 
-    API.get(`/api/owner/billing-cycles?buildingId=${selectedBuildingId}`)
+    API.get(`/owner/billing-cycles?buildingId=${selectedBuildingId}`)
       .then(res => {
         const cList = res.data || [];
         setCycles(cList);
@@ -70,7 +70,7 @@ export default function BulkBillingPage() {
       return;
     }
 
-    API.get(`/api/bulk-billing/readiness?buildingId=${selectedBuildingId}&billingCycleId=${selectedCycleId}`)
+    API.get(`/bulk-billing/readiness?buildingId=${selectedBuildingId}&billingCycleId=${selectedCycleId}`)
       .then(res => setReadiness(res.data))
       .catch(err => console.error('Failed to fetch readiness info:', err));
   }, [selectedBuildingId, selectedCycleId]);
@@ -85,7 +85,7 @@ export default function BulkBillingPage() {
     setDownloadingTemplate(true);
     try {
       const response = await API.get(
-        `/api/bulk-billing/template?buildingId=${selectedBuildingId}&billingCycleId=${selectedCycleId}`,
+        `/bulk-billing/template?buildingId=${selectedBuildingId}&billingCycleId=${selectedCycleId}`,
         { responseType: 'blob' }
       );
       const blob = new Blob([response.data], { type: 'text/csv;charset=utf-8;' });
@@ -141,13 +141,18 @@ export default function BulkBillingPage() {
     formData.append('billingCycleId', selectedCycleId);
 
     try {
-      const res = await API.post('/api/bulk-billing/validate', formData, {
-        headers: { 'Content-Type': 'multipart/form-data' }
-      });
+      const res = await API.post('/bulk-billing/validate', formData);
       setValidationResult(res.data);
     } catch (err) {
       console.error(err);
-      setErrorBanner(err.response?.data?.message || 'Failed to validate uploaded CSV file. Please verify file format.');
+      let msg = err.response?.data?.message || err.response?.data?.error;
+      if (!msg && typeof err.response?.data === 'string' && err.response.data.trim()) {
+        msg = err.response.data;
+      }
+      if (!msg) {
+        msg = err.message || 'Failed to validate uploaded CSV file. Please verify file format.';
+      }
+      setErrorBanner(msg);
       setValidationResult(null);
     } finally {
       setValidating(false);
@@ -160,7 +165,7 @@ export default function BulkBillingPage() {
 
     setDownloadingErrors(true);
     try {
-      const response = await API.post('/api/bulk-billing/error-report', validationResult, {
+      const response = await API.post('/bulk-billing/error-report', validationResult, {
         responseType: 'blob'
       });
       const blob = new Blob([response.data], { type: 'text/csv;charset=utf-8;' });
@@ -192,29 +197,36 @@ export default function BulkBillingPage() {
 
     const formData = new FormData();
     formData.append('file', selectedFile);
+    formData.append('buildingId', selectedBuildingId);
+    formData.append('billingCycleId', selectedCycleId);
 
     try {
       const response = await API.post(
-        `/api/bulk-billing/generate?buildingId=${selectedBuildingId}&billingCycleId=${selectedCycleId}`,
-        formData,
-        { headers: { 'Content-Type': 'multipart/form-data' } }
+        `/bulk-billing/generate?buildingId=${selectedBuildingId}&billingCycleId=${selectedCycleId}`,
+        formData
       );
 
       setGenerationResult(response.data);
 
       // Refresh readiness metrics to update cycle status in UI
-      API.get(`/api/bulk-billing/readiness?buildingId=${selectedBuildingId}&billingCycleId=${selectedCycleId}`)
+      API.get(`/bulk-billing/readiness?buildingId=${selectedBuildingId}&billingCycleId=${selectedCycleId}`)
         .then(res => setReadiness(res.data))
         .catch(err => console.error('Failed to refresh readiness:', err));
 
       // Refresh cycles list to show FINALIZED status
-      API.get(`/api/owner/billing-cycles?buildingId=${selectedBuildingId}`)
+      API.get(`/owner/billing-cycles?buildingId=${selectedBuildingId}`)
         .then(res => setCycles(res.data || []))
         .catch(err => console.error(err));
 
     } catch (err) {
       console.error(err);
-      const msg = err.response?.data?.message || 'Bulk bill generation failed. Please review error details.';
+      let msg = err.response?.data?.message || err.response?.data?.error;
+      if (!msg && typeof err.response?.data === 'string' && err.response.data.trim()) {
+        msg = err.response.data;
+      }
+      if (!msg) {
+        msg = err.message || 'Bulk bill generation failed. Please review error details.';
+      }
       setErrorBanner(msg);
       alert('Bulk Generation Error: ' + msg);
     } finally {
@@ -431,7 +443,7 @@ export default function BulkBillingPage() {
                 resident_id, apartment_number, resident_name, meter_id, meter_number, previous_reading, current_reading
               </code>
               <small className="text-muted mt-2 d-block fs-8">
-                * Simply enter values into the <code>current_reading</code> column and save the file.
+                * Simply enter values into the <code>current_reading</code> column and save the file. <code>meter_id</code> and <code>meter_number</code> are pre-populated and match the <strong>Meter ID (#)</strong> on each unit card in <strong>Building &amp; Unit Inventory</strong>.
               </small>
             </div>
 
