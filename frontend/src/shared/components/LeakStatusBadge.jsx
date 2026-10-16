@@ -70,7 +70,19 @@ export default function LeakStatusBadge({
     lg: 'px-3 py-1.5 fs-6'
   };
 
-  const confidencePct = confidence != null ? Math.round(confidence * 100) : null;
+  let confLabel = null;
+  if (typeof confidence === 'number' && !isNaN(confidence)) {
+    const val = (confidence > 0 && confidence <= 1.0) ? Math.round(confidence * 100) : Math.round(confidence);
+    confLabel = `${val}%`;
+  } else if (typeof confidence === 'string' && confidence.trim()) {
+    const num = parseFloat(confidence);
+    if (!isNaN(num)) {
+      const val = (num > 0 && num <= 1.0) ? Math.round(num * 100) : Math.round(num);
+      confLabel = `${val}%`;
+    } else {
+      confLabel = confidence.toUpperCase();
+    }
+  }
 
   return (
     <span
@@ -79,9 +91,9 @@ export default function LeakStatusBadge({
     >
       <i className={`bi ${config.icon} ${config.pulse ? 'text-danger animate-pulse' : ''}`}></i>
       <span>{config.label}</span>
-      {confidencePct !== null && (
-        <span className="opacity-75 small ms-0.5" title={`Model Confidence: ${confidencePct}%`}>
-          ({confidencePct}%)
+      {confLabel && (
+        <span className="opacity-75 small ms-0.5" title={`Model Confidence: ${confLabel}`}>
+          ({confLabel})
         </span>
       )}
     </span>
