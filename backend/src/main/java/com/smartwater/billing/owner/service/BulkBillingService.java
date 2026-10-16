@@ -24,6 +24,7 @@ import java.math.RoundingMode;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.*;
+import java.util.stream.Collectors;
 
 @Service
 public class BulkBillingService {
@@ -102,7 +103,7 @@ public class BulkBillingService {
      * for a specific building and billing cycle, with historical previous readings pre-filled.
      * STRICT SAFEGUARD: Read-only query; does not modify or create database records.
      */
-    @Transactional(readOnly = true)
+    @Transactional
     public byte[] generateTemplate(String ownerEmail, Long buildingId, Long cycleId) {
         Building building = verifyBuildingOwnership(ownerEmail, buildingId);
         BillingCycle cycle = billingCycleRepository.findById(cycleId)
@@ -112,9 +113,11 @@ public class BulkBillingService {
             throw new BadRequestException("Billing cycle #" + cycleId + " does not belong to building '" + building.getBuildingName() + "'.");
         }
 
-        List<Resident> residents = residentRepository.findByBuildingBuildingId(buildingId);
+        List<Resident> residents = residentRepository.findByBuildingBuildingId(buildingId).stream()
+                .filter(r -> r.getAccountStatus() == Resident.AccountStatus.ACTIVE)
+                .collect(Collectors.toList());
         if (residents.isEmpty()) {
-            throw new BadRequestException("No residents found in building '" + building.getBuildingName() + "'. Please add residents before generating a template.");
+            throw new BadRequestException("No active residents found in building '" + building.getBuildingName() + "'. Please add residents before generating a template.");
         }
 
         // Sort residents by apartment number
@@ -206,7 +209,9 @@ public class BulkBillingService {
         BillingCycle cycle = billingCycleRepository.findById(cycleId)
                 .orElseThrow(() -> new ResourceNotFoundException("Billing cycle not found with id: " + cycleId));
 
-        List<Resident> residents = residentRepository.findByBuildingBuildingId(buildingId);
+        List<Resident> residents = residentRepository.findByBuildingBuildingId(buildingId).stream()
+                .filter(r -> r.getAccountStatus() == Resident.AccountStatus.ACTIVE)
+                .collect(Collectors.toList());
         List<WaterUsage> recordedUsages = usageRepository.findByBillingCycleId(cycleId);
         
         long existingBillsCount = residents.stream()
@@ -750,7 +755,9 @@ public class BulkBillingService {
         }
 
         // 3. Existing Bills Guard (Ensure cycle hasn't had bills generated previously)
-        List<Resident> buildingResidents = residentRepository.findByBuildingBuildingId(buildingId);
+        List<Resident> buildingResidents = residentRepository.findByBuildingBuildingId(buildingId).stream()
+                .filter(r -> r.getAccountStatus() == Resident.AccountStatus.ACTIVE)
+                .collect(Collectors.toList());
         if (buildingResidents.isEmpty()) {
             throw new BadRequestException("No active residents found in building '" + building.getBuildingName() + "'. Cannot generate bills.");
         }

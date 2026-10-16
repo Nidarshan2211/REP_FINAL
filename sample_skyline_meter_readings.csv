@@ -1,0 +1,4 @@
+resident_id,apartment_number,resident_name,meter_id,meter_number,previous_reading,current_reading
+1,Apt 4B,Michael Scott,1,WM-SKY-4B,144.30,192.80
+2,A-102,sellamuthu,2,WM-B-101-A-102,100.00,114.50
+3,A-103,Nidarshan,3,WM-B-101-A-103,100.00,115.20
