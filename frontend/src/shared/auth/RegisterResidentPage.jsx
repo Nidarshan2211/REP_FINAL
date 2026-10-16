@@ -13,7 +13,9 @@ export default function RegisterResidentPage() {
     phone: '',
     password: '',
     confirmPassword: '',
-    apartmentId: ''
+    apartmentId: '',
+    householdSize: '2',
+    childrenCount: '0'
   });
 
   const [availableApartments, setAvailableApartments] = useState([]);
@@ -133,7 +135,9 @@ export default function RegisterResidentPage() {
         phone: formData.phone,
         password: formData.password,
         confirmPassword: formData.confirmPassword,
-        apartmentId: claimNow && formData.apartmentId ? parseInt(formData.apartmentId) : null
+        apartmentId: claimNow && formData.apartmentId ? parseInt(formData.apartmentId) : null,
+        householdSize: claimNow && formData.apartmentId ? parseInt(formData.householdSize || 2, 10) : null,
+        childrenCount: claimNow && formData.apartmentId && formData.childrenCount ? parseInt(formData.childrenCount, 10) : null
       };
 
       await registerResident(payload);
@@ -347,6 +351,43 @@ export default function RegisterResidentPage() {
                     {!loadingApts && selectedBuildingId && filteredApartments.length === 0 && (
                       <small className="text-danger d-block mt-1 fs-8">No vacant units available in this building.</small>
                     )}
+                  </div>
+
+                  <div className="col-12 mt-2 pt-2 border-top" style={{ borderColor: '#E5F3F9' }}>
+                    <div className="d-flex align-items-center gap-2 mb-1">
+                      <i className="bi bi-people-fill" style={{ color: '#005F73' }}></i>
+                      <label className="form-label fs-8 fw-semibold text-dark mb-0">Household Details for Water Diagnostics</label>
+                    </div>
+                    <p className="text-muted fs-8 mb-2">
+                      Helps us detect water leaks accurately. Only numbers are stored, never names or personal data.
+                    </p>
+                    <div className="row g-2">
+                      <div className="col-6">
+                        <label className="form-label fs-8 text-muted mb-1">Total People (1-15) *</label>
+                        <input
+                          type="number"
+                          min="1"
+                          max="15"
+                          name="householdSize"
+                          className="form-control form-control-sm"
+                          value={formData.householdSize}
+                          onChange={handleChange}
+                          required={claimNow}
+                        />
+                      </div>
+                      <div className="col-6">
+                        <label className="form-label fs-8 text-muted mb-1">Children (Under 12)</label>
+                        <input
+                          type="number"
+                          min="0"
+                          max={formData.householdSize || 15}
+                          name="childrenCount"
+                          className="form-control form-control-sm"
+                          value={formData.childrenCount}
+                          onChange={handleChange}
+                        />
+                      </div>
+                    </div>
                   </div>
                 </div>
               )}

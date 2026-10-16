@@ -54,31 +54,31 @@ export default function OwnerDashboard() {
 
       {/* Quick Operations Panel */}
       <div className="row g-4 mb-4">
-        <div className="col-md-4">
+        <div className="col-lg-3 col-md-6">
           <div className="card glass-card h-100 border p-4 shadow-sm">
             <div className="d-flex align-items-center gap-3 mb-3">
               <div className="rounded-3 bg-light border p-3 text-dark fs-4">
                 <i className="bi bi-water"></i>
               </div>
               <div>
-                <h5 className="fw-bold mb-1 text-dark">Record Meter Reading</h5>
-                <small className="text-muted">Enter monthly consumption numbers for resident meters</small>
+                <h5 className="fw-bold mb-1 text-dark">Meter Reading</h5>
+                <small className="text-muted">Enter monthly consumption numbers for meters</small>
               </div>
             </div>
             <Link to="/owner/usage" className="btn btn-outline-dark w-100 fw-bold mt-auto py-2">
-              Water Meter Logs <i className="bi bi-arrow-right ms-1"></i>
+              Water Logs <i className="bi bi-arrow-right ms-1"></i>
             </Link>
           </div>
         </div>
 
-        <div className="col-md-4">
+        <div className="col-lg-3 col-md-6">
           <div className="card glass-card h-100 border p-4 shadow-sm">
             <div className="d-flex align-items-center gap-3 mb-3">
               <div className="rounded-3 bg-light border p-3 text-dark fs-4">
                 <i className="bi bi-calculator"></i>
               </div>
               <div>
-                <h5 className="fw-bold mb-1 text-dark">Generate Monthly Bills</h5>
+                <h5 className="fw-bold mb-1 text-dark">Monthly Bills</h5>
                 <small className="text-muted">Apply 3-tier tariffs and issue cycle bills</small>
               </div>
             </div>
@@ -88,19 +88,36 @@ export default function OwnerDashboard() {
           </div>
         </div>
 
-        <div className="col-md-4">
+        <div className="col-lg-3 col-md-6">
           <div className="card glass-card h-100 border p-4 shadow-sm">
             <div className="d-flex align-items-center gap-3 mb-3">
               <div className="rounded-3 bg-primary bg-opacity-10 border border-primary border-opacity-25 p-3 text-primary fs-4">
                 <i className="bi bi-receipt-cutoff"></i>
               </div>
               <div>
-                <h5 className="fw-bold mb-1 text-dark">Apartment Invoices</h5>
-                <small className="text-muted">Track paid & unpaid balances, download PDFs & view breakdown</small>
+                <h5 className="fw-bold mb-1 text-dark">Invoices</h5>
+                <small className="text-muted">Track balances, download PDFs & view breakdown</small>
               </div>
             </div>
             <Link to="/owner/invoices" className="btn btn-primary w-100 fw-bold mt-auto py-2">
-              View Invoices <i className="bi bi-arrow-right ms-1"></i>
+              Invoices <i className="bi bi-arrow-right ms-1"></i>
+            </Link>
+          </div>
+        </div>
+
+        <div className="col-lg-3 col-md-6">
+          <div className="card glass-card h-100 border p-4 shadow-sm border-danger-subtle bg-danger-subtle bg-opacity-10">
+            <div className="d-flex align-items-center gap-3 mb-3">
+              <div className="rounded-3 bg-danger bg-opacity-10 border border-danger border-opacity-25 p-3 text-danger fs-4">
+                <i className="bi bi-shield-exclamation"></i>
+              </div>
+              <div>
+                <h5 className="fw-bold mb-1 text-danger">Leak Monitoring</h5>
+                <small className="text-muted">AI per-flat anomaly detection & loss prevention</small>
+              </div>
+            </div>
+            <Link to="/owner/leak-monitoring" className="btn btn-danger w-100 fw-bold mt-auto py-2">
+              Diagnostics <i className="bi bi-arrow-right ms-1"></i>
             </Link>
           </div>
         </div>

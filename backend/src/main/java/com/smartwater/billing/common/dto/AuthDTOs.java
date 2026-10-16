@@ -172,6 +172,9 @@ public class AuthDTOs {
         @Size(min = 6, message = "Password must be at least 6 characters")
         private String password;
 
+        private Integer householdSize;
+        private Integer childrenCount;
+
         public SetPasswordRequest() {}
         public SetPasswordRequest(String token, String password) {
             this.token = token;
@@ -191,6 +194,12 @@ public class AuthDTOs {
 
         public String getPassword() { return password; }
         public void setPassword(String password) { this.password = password; }
+
+        public Integer getHouseholdSize() { return householdSize; }
+        public void setHouseholdSize(Integer householdSize) { this.householdSize = householdSize; }
+
+        public Integer getChildrenCount() { return childrenCount; }
+        public void setChildrenCount(Integer childrenCount) { this.childrenCount = childrenCount; }
     }
 
     public static class ValidateInvitationResponse {
@@ -199,16 +208,23 @@ public class AuthDTOs {
         private String email;
         private String buildingName;
         private String apartmentNumber;
+        private Integer householdSize;
+        private Integer childrenCount;
         private String expiresAt;
         private String message;
 
         public ValidateInvitationResponse() {}
         public ValidateInvitationResponse(String status, String residentName, String email, String buildingName, String apartmentNumber, String expiresAt, String message) {
+            this(status, residentName, email, buildingName, apartmentNumber, null, null, expiresAt, message);
+        }
+        public ValidateInvitationResponse(String status, String residentName, String email, String buildingName, String apartmentNumber, Integer householdSize, Integer childrenCount, String expiresAt, String message) {
             this.status = status;
             this.residentName = residentName;
             this.email = email;
             this.buildingName = buildingName;
             this.apartmentNumber = apartmentNumber;
+            this.householdSize = householdSize;
+            this.childrenCount = childrenCount;
             this.expiresAt = expiresAt;
             this.message = message;
         }
@@ -227,6 +243,12 @@ public class AuthDTOs {
 
         public String getApartmentNumber() { return apartmentNumber; }
         public void setApartmentNumber(String apartmentNumber) { this.apartmentNumber = apartmentNumber; }
+
+        public Integer getHouseholdSize() { return householdSize; }
+        public void setHouseholdSize(Integer householdSize) { this.householdSize = householdSize; }
+
+        public Integer getChildrenCount() { return childrenCount; }
+        public void setChildrenCount(Integer childrenCount) { this.childrenCount = childrenCount; }
 
         public String getExpiresAt() { return expiresAt; }
         public void setExpiresAt(String expiresAt) { this.expiresAt = expiresAt; }

@@ -14,6 +14,10 @@ export default function AcceptInvitation() {
 
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
+  const [householdSize, setHouseholdSize] = useState('2');
+  const [childrenCount, setChildrenCount] = useState('0');
+  const [sanityWarningDismissed, setSanityWarningDismissed] = useState(false);
+  const [formError, setFormError] = useState('');
   const [submitting, setSubmitting] = useState(false);
 
   useEffect(() => {
@@ -40,24 +44,48 @@ export default function AcceptInvitation() {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
+    setFormError('');
+
     if (password.length < 6) {
-      alert('Password must be at least 6 characters long.');
+      setFormError('Password must be at least 6 characters long.');
       return;
     }
     if (password !== confirmPassword) {
-      alert('Passwords do not match. Please verify your entry.');
+      setFormError('Passwords do not match. Please verify your entry.');
       return;
+    }
+
+    const size = parseInt(householdSize, 10);
+    const children = childrenCount ? parseInt(childrenCount, 10) : 0;
+
+    if (isNaN(size) || size < 1 || size > 15) {
+      setFormError('Total household members must be an integer between 1 and 15.');
+      return;
+    }
+
+    if (children < 0 || children > size) {
+      setFormError('Children count cannot exceed total household members.');
+      return;
+    }
+
+    if (size > 6 && !sanityWarningDismissed) {
+      if (!window.confirm(`You specified ${size} household members. Water leak benchmarks will be calibrated for a large household. Are you sure this is accurate?`)) {
+        return;
+      }
+      setSanityWarningDismissed(true);
     }
 
     setSubmitting(true);
     try {
       await API.post('/api/residents/invitations/accept', {
         token: token,
-        password: password
+        password: password,
+        householdSize: size,
+        childrenCount: children
       });
       setStatus('SUCCESS');
     } catch (err) {
-      alert(err.response?.data?.message || 'Failed to activate account.');
+      setFormError(err.response?.data?.message || 'Failed to activate account.');
     } finally {
       setSubmitting(false);
     }
@@ -141,6 +169,56 @@ export default function AcceptInvitation() {
                   minLength={6}
                   required
                 />
+              </div>
+
+              {formError && (
+                <div className="alert alert-danger py-2 px-3 rounded-3 small mb-3">
+                  <i className="bi bi-exclamation-circle me-1"></i> {formError}
+                </div>
+              )}
+
+              {/* Required Household Details Section */}
+              <div className="p-3 bg-light rounded-3 mb-4 border border-secondary-subtle">
+                <div className="d-flex align-items-center gap-2 mb-2">
+                  <i className="bi bi-people-fill text-primary"></i>
+                  <h6 className="fw-bold text-dark mb-0 fs-7">Household Details (Required)</h6>
+                </div>
+                <p className="fs-8 text-muted mb-3">
+                  Helps us detect water leaks accurately. Only numbers are stored, never names or personal data.
+                </p>
+
+                <div className="row g-2 mb-2">
+                  <div className="col-7">
+                    <label className="form-label fw-semibold fs-8 text-dark mb-1">
+                      Total People in Flat *
+                    </label>
+                    <input
+                      type="number"
+                      min="1"
+                      max="15"
+                      className="form-control form-control-sm"
+                      value={householdSize}
+                      onChange={(e) => setHouseholdSize(e.target.value)}
+                      required
+                    />
+                  </div>
+                  <div className="col-5">
+                    <label className="form-label fw-semibold fs-8 text-dark mb-1">
+                      Children (Under 12)
+                    </label>
+                    <input
+                      type="number"
+                      min="0"
+                      max={householdSize || 15}
+                      className="form-control form-control-sm"
+                      value={childrenCount}
+                      onChange={(e) => setChildrenCount(e.target.value)}
+                    />
+                  </div>
+                </div>
+                <small className="text-muted fs-9 d-block">
+                  Adults + Children residing permanently (1 to 15).
+                </small>
               </div>
 
               <button

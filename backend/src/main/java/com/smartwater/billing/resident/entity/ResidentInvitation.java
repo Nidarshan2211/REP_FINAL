@@ -58,6 +58,12 @@ public class ResidentInvitation {
     @Column(nullable = false, length = 50)
     private InvitationStatus status;
 
+    @Column(name = "household_size")
+    private Integer householdSize;
+
+    @Column(name = "children_count")
+    private Integer childrenCount;
+
     @Column(name = "created_at", updatable = false)
     private LocalDateTime createdAt;
 
@@ -136,6 +142,12 @@ public class ResidentInvitation {
     public LocalDateTime getAcceptedAt() { return acceptedAt; }
     public void setAcceptedAt(LocalDateTime acceptedAt) { this.acceptedAt = acceptedAt; }
 
+    public Integer getHouseholdSize() { return householdSize; }
+    public void setHouseholdSize(Integer householdSize) { this.householdSize = householdSize; }
+
+    public Integer getChildrenCount() { return childrenCount; }
+    public void setChildrenCount(Integer childrenCount) { this.childrenCount = childrenCount; }
+
     public static Builder builder() { return new Builder(); }
 
     public static class Builder {
@@ -151,6 +163,8 @@ public class ResidentInvitation {
         private String tokenHash;
         private LocalDateTime expiresAt;
         private InvitationStatus status;
+        private Integer householdSize;
+        private Integer childrenCount;
         private LocalDateTime createdAt;
         private LocalDateTime acceptedAt;
 
@@ -166,11 +180,16 @@ public class ResidentInvitation {
         public Builder tokenHash(String tokenHash) { this.tokenHash = tokenHash; return this; }
         public Builder expiresAt(LocalDateTime expiresAt) { this.expiresAt = expiresAt; return this; }
         public Builder status(InvitationStatus status) { this.status = status; return this; }
+        public Builder householdSize(Integer householdSize) { this.householdSize = householdSize; return this; }
+        public Builder childrenCount(Integer childrenCount) { this.childrenCount = childrenCount; return this; }
         public Builder createdAt(LocalDateTime createdAt) { this.createdAt = createdAt; return this; }
         public Builder acceptedAt(LocalDateTime acceptedAt) { this.acceptedAt = acceptedAt; return this; }
 
         public ResidentInvitation build() {
-            return new ResidentInvitation(id, resident, building, apartment, invitedBy, residentName, residentEmail, phoneNumber, apartmentNumber, tokenHash, expiresAt, status, createdAt, acceptedAt);
+            ResidentInvitation inv = new ResidentInvitation(id, resident, building, apartment, invitedBy, residentName, residentEmail, phoneNumber, apartmentNumber, tokenHash, expiresAt, status, createdAt, acceptedAt);
+            inv.setHouseholdSize(householdSize);
+            inv.setChildrenCount(childrenCount);
+            return inv;
         }
     }
 

@@ -22,6 +22,7 @@ public interface BillingCycleRepository extends JpaRepository<BillingCycle, Long
     Optional<BillingCycle> findTopByBuildingBuildingIdAndStatus(Long buildingId, BillingCycle.CycleStatus status);
     Optional<BillingCycle> findByBuildingBuildingIdAndBillingMonth(Long buildingId, LocalDate billingMonth);
     Optional<BillingCycle> findByBuildingBuildingIdAndStartDateAndEndDate(Long buildingId, LocalDate startDate, LocalDate endDate);
+    List<BillingCycle> findByStatus(BillingCycle.CycleStatus status);
 
     @Lock(LockModeType.PESSIMISTIC_WRITE)
     @Query("SELECT bc FROM BillingCycle bc WHERE bc.id = :id")

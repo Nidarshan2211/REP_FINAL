@@ -121,6 +121,9 @@ public class BuildingOwnerService {
     @Transactional
     public BuildingResponse createBuilding(String email, CreateBuildingRequest request) {
         BuildingOwner owner = getOwnerByUserEmail(email);
+        if (owner.getApprovalStatus() != BuildingOwner.ApprovalStatus.APPROVED) {
+            throw new BadRequestException("You cannot create buildings until your owner account has been approved by the Super Admin.");
+        }
         Building building = Building.builder()
                 .owner(owner)
                 .buildingName(request.getBuildingName())

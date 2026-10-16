@@ -21,12 +21,11 @@ public class OccupancyDTOs {
         private String password;
 
         private String confirmPassword;
-
         private String phone;
-
         private Long apartmentId;
-
         private String invitationToken;
+        private Integer householdSize;
+        private Integer childrenCount;
 
         public RegisterResidentRequest() {}
 
@@ -50,6 +49,12 @@ public class OccupancyDTOs {
 
         public String getInvitationToken() { return invitationToken; }
         public void setInvitationToken(String invitationToken) { this.invitationToken = invitationToken; }
+
+        public Integer getHouseholdSize() { return householdSize; }
+        public void setHouseholdSize(Integer householdSize) { this.householdSize = householdSize; }
+
+        public Integer getChildrenCount() { return childrenCount; }
+        public void setChildrenCount(Integer childrenCount) { this.childrenCount = childrenCount; }
     }
 
     public static class SelectApartmentRequest {
@@ -360,6 +365,10 @@ public class OccupancyDTOs {
 
         private String notes;
 
+        private Integer householdSize;
+
+        private Integer childrenCount;
+
         public SubmitOccupancyRequest() {}
 
         public SubmitOccupancyRequest(Long apartmentId, String notes) {
@@ -367,11 +376,24 @@ public class OccupancyDTOs {
             this.notes = notes;
         }
 
+        public SubmitOccupancyRequest(Long apartmentId, String notes, Integer householdSize, Integer childrenCount) {
+            this.apartmentId = apartmentId;
+            this.notes = notes;
+            this.householdSize = householdSize;
+            this.childrenCount = childrenCount;
+        }
+
         public Long getApartmentId() { return apartmentId; }
         public void setApartmentId(Long apartmentId) { this.apartmentId = apartmentId; }
 
         public String getNotes() { return notes; }
         public void setNotes(String notes) { this.notes = notes; }
+
+        public Integer getHouseholdSize() { return householdSize; }
+        public void setHouseholdSize(Integer householdSize) { this.householdSize = householdSize; }
+
+        public Integer getChildrenCount() { return childrenCount; }
+        public void setChildrenCount(Integer childrenCount) { this.childrenCount = childrenCount; }
     }
 
     public static class ReviewOccupancyRequest {

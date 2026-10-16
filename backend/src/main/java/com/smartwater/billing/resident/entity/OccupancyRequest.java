@@ -55,6 +55,12 @@ public class OccupancyRequest {
     @Column(name = "notes", length = 255)
     private String notes;
 
+    @Column(name = "household_size")
+    private Integer householdSize;
+
+    @Column(name = "children_count")
+    private Integer childrenCount;
+
     @Column(name = "created_at", updatable = false)
     private LocalDateTime createdAt;
 
@@ -116,6 +122,12 @@ public class OccupancyRequest {
     public LocalDateTime getCreatedAt() { return createdAt; }
     public void setCreatedAt(LocalDateTime createdAt) { this.createdAt = createdAt; }
 
+    public Integer getHouseholdSize() { return householdSize; }
+    public void setHouseholdSize(Integer householdSize) { this.householdSize = householdSize; }
+
+    public Integer getChildrenCount() { return childrenCount; }
+    public void setChildrenCount(Integer childrenCount) { this.childrenCount = childrenCount; }
+
     public static Builder builder() { return new Builder(); }
 
     public static class Builder {
@@ -128,6 +140,8 @@ public class OccupancyRequest {
         private String reviewedBy;
         private String rejectionReason;
         private String notes;
+        private Integer householdSize;
+        private Integer childrenCount;
         private LocalDateTime createdAt;
 
         public Builder requestId(Long requestId) { this.requestId = requestId; return this; }
@@ -139,10 +153,15 @@ public class OccupancyRequest {
         public Builder reviewedBy(String reviewedBy) { this.reviewedBy = reviewedBy; return this; }
         public Builder rejectionReason(String rejectionReason) { this.rejectionReason = rejectionReason; return this; }
         public Builder notes(String notes) { this.notes = notes; return this; }
+        public Builder householdSize(Integer householdSize) { this.householdSize = householdSize; return this; }
+        public Builder childrenCount(Integer childrenCount) { this.childrenCount = childrenCount; return this; }
         public Builder createdAt(LocalDateTime createdAt) { this.createdAt = createdAt; return this; }
 
         public OccupancyRequest build() {
-            return new OccupancyRequest(requestId, apartment, resident, status, requestDate, reviewedAt, reviewedBy, rejectionReason, notes, createdAt);
+            OccupancyRequest req = new OccupancyRequest(requestId, apartment, resident, status, requestDate, reviewedAt, reviewedBy, rejectionReason, notes, createdAt);
+            req.setHouseholdSize(householdSize);
+            req.setChildrenCount(childrenCount);
+            return req;
         }
     }
 }

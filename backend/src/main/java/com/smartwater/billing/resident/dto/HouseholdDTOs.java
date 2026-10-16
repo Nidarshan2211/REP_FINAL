@@ -70,4 +70,114 @@ public class HouseholdDTOs {
         private String meterSerial;
         private Double latestMeterReading;
     }
+
+    @Getter
+    @Setter
+    @NoArgsConstructor
+    @AllArgsConstructor
+    @Builder
+    public static class HouseholdUpdateRequest {
+        @NotNull(message = "Household size is required")
+        private Integer householdSize;
+
+        private Integer childrenCount;
+        private String reason;
+        private String note;
+        private Boolean confirmSanityWarning;
+    }
+
+    @Getter
+    @Setter
+    @NoArgsConstructor
+    @AllArgsConstructor
+    @Builder
+    public static class HouseholdConfirmRequest {
+        private Boolean confirmed;
+    }
+
+    @Getter
+    @Setter
+    @NoArgsConstructor
+    @AllArgsConstructor
+    @Builder
+    public static class HouseholdDetailResponse {
+        private Long occupancyId;
+        private Long apartmentId;
+        private String apartmentNumber;
+        private Integer householdSize;
+        private Integer childrenCount;
+        private String householdSizeSource;
+        private Boolean householdSizeConfirmed;
+        private Boolean sanityWarning;
+        private java.util.List<HouseholdHistoryItemResponse> history;
+    }
+
+    @Getter
+    @Setter
+    @NoArgsConstructor
+    @AllArgsConstructor
+    @Builder
+    public static class HouseholdHistoryItemResponse {
+        private Long id;
+        private Integer householdSize;
+        private Integer childrenCount;
+        private java.time.LocalDate effectiveFrom;
+        private java.time.LocalDate effectiveTo;
+        private String changedByRole;
+        private String reason;
+        private String note;
+        private Boolean sanityWarning;
+        private String status;
+        private java.time.LocalDateTime createdAt;
+    }
+
+    @Getter
+    @Setter
+    @NoArgsConstructor
+    @AllArgsConstructor
+    @Builder
+    public static class AwayPeriodRequest {
+        @NotNull(message = "Start date is required")
+        private java.time.LocalDate startDate;
+
+        @NotNull(message = "End date is required")
+        private java.time.LocalDate endDate;
+
+        private String note;
+    }
+
+    @Getter
+    @Setter
+    @NoArgsConstructor
+    @AllArgsConstructor
+    @Builder
+    public static class AwayPeriodResponse {
+        private Long id;
+        private Long occupancyId;
+        private Long apartmentId;
+        private java.time.LocalDate startDate;
+        private java.time.LocalDate endDate;
+        private Integer durationDays;
+        private String note;
+        private java.time.LocalDateTime createdAt;
+    }
+
+    @Getter
+    @Setter
+    @NoArgsConstructor
+    @AllArgsConstructor
+    @Builder
+    public static class BuildingHouseholdStatusResponse {
+        private Long apartmentId;
+        private String apartmentNumber;
+        private Integer floorNumber;
+        private String unitType;
+        private String residentName;
+        private String residentEmail;
+        private Integer householdSize;
+        private Integer childrenCount;
+        private String householdSizeSource;
+        private Boolean householdSizeConfirmed;
+        private java.time.LocalDateTime lastUpdated;
+    }
 }

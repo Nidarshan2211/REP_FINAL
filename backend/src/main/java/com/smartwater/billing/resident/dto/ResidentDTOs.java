@@ -26,6 +26,10 @@ public class ResidentDTOs {
 
         private Long apartmentId;
 
+        private Integer householdSize;
+
+        private Integer childrenCount;
+
         public InviteResidentRequest() {}
         public InviteResidentRequest(Long buildingId, String name, String email, String phone, String apartmentNumber) {
             this.buildingId = buildingId;
@@ -52,6 +56,12 @@ public class ResidentDTOs {
 
         public Long getApartmentId() { return apartmentId; }
         public void setApartmentId(Long apartmentId) { this.apartmentId = apartmentId; }
+
+        public Integer getHouseholdSize() { return householdSize; }
+        public void setHouseholdSize(Integer householdSize) { this.householdSize = householdSize; }
+
+        public Integer getChildrenCount() { return childrenCount; }
+        public void setChildrenCount(Integer childrenCount) { this.childrenCount = childrenCount; }
     }
 
     public static class UpdateResidentRequest {

@@ -575,7 +575,7 @@ public class ApartmentService {
 
     @Transactional(readOnly = true)
     public List<PublicOwnerResponse> getPublicOwners() {
-        List<BuildingOwner> owners = ownerRepository.findAll();
+        List<BuildingOwner> owners = ownerRepository.findByApprovalStatus(BuildingOwner.ApprovalStatus.APPROVED);
         return owners.stream()
                 .map(owner -> {
                     String name = owner.getUser() != null && owner.getUser().getName() != null
@@ -594,6 +594,10 @@ public class ApartmentService {
 
     @Transactional
     public List<PublicBuildingResponse> getOwnerBuildings(Long ownerId) {
+        BuildingOwner owner = ownerRepository.findById(ownerId).orElse(null);
+        if (owner == null || owner.getApprovalStatus() != BuildingOwner.ApprovalStatus.APPROVED) {
+            return Collections.emptyList();
+        }
         List<Building> buildings = buildingRepository.findByOwnerOwnerId(ownerId);
         for (Building b : buildings) {
             ensureDefaultApartmentsForBuilding(b);
@@ -619,7 +623,9 @@ public class ApartmentService {
 
     @Transactional
     public List<PublicBuildingResponse> getAllPublicBuildings() {
-        List<Building> buildings = buildingRepository.findAll();
+        List<Building> buildings = buildingRepository.findAll().stream()
+                .filter(b -> b.getOwner() != null && b.getOwner().getApprovalStatus() == BuildingOwner.ApprovalStatus.APPROVED)
+                .collect(Collectors.toList());
         for (Building b : buildings) {
             ensureDefaultApartmentsForBuilding(b);
         }
@@ -645,11 +651,17 @@ public class ApartmentService {
     @Transactional
     public List<AvailableApartmentResponse> getAvailableApartments(Long buildingId, Integer floorNumber) {
         if (buildingId != null) {
-            buildingRepository.findById(buildingId).ifPresent(this::ensureDefaultApartmentsForBuilding);
+            Building b = buildingRepository.findById(buildingId).orElse(null);
+            if (b == null || b.getOwner() == null || b.getOwner().getApprovalStatus() != BuildingOwner.ApprovalStatus.APPROVED) {
+                return Collections.emptyList();
+            }
+            ensureDefaultApartmentsForBuilding(b);
         } else {
             List<Building> allBuildings = buildingRepository.findAll();
             for (Building b : allBuildings) {
-                ensureDefaultApartmentsForBuilding(b);
+                if (b.getOwner() != null && b.getOwner().getApprovalStatus() == BuildingOwner.ApprovalStatus.APPROVED) {
+                    ensureDefaultApartmentsForBuilding(b);
+                }
             }
         }
 
@@ -659,13 +671,22 @@ public class ApartmentService {
         } else if (buildingId != null) {
             apartments = apartmentRepository.findByBuildingBuildingIdOrderByFloorNumberAscRoomNumberAsc(buildingId);
         } else {
-            apartments = apartmentRepository.findAll();
+            apartments = apartmentRepository.findAll().stream()
+                    .filter(a -> a.getBuilding() != null && a.getBuilding().getOwner() != null
+                            && a.getBuilding().getOwner().getApprovalStatus() == BuildingOwner.ApprovalStatus.APPROVED)
+                    .collect(Collectors.toList());
         }
 
         List<AvailableApartmentResponse> available = new ArrayList<>();
         LocalDateTime now = LocalDateTime.now();
 
         for (Apartment apt : apartments) {
+            // Check building owner approval status
+            if (apt.getBuilding() == null || apt.getBuilding().getOwner() == null
+                    || apt.getBuilding().getOwner().getApprovalStatus() != BuildingOwner.ApprovalStatus.APPROVED) {
+                continue;
+            }
+
             // Check active occupancy
             Optional<ApartmentOccupancy> activeOcc = occupancyRepository.findFirstByApartmentApartmentIdAndStatus(apt.getApartmentId(), OccupancyStatus.ACTIVE);
             if (activeOcc.isPresent()) {

@@ -13,6 +13,7 @@ import com.smartwater.billing.common.exception.ResourceNotFoundException;
 import com.smartwater.billing.common.repository.*;
 import com.smartwater.billing.owner.repository.*;
 import com.smartwater.billing.resident.repository.*;
+import com.smartwater.billing.common.ml.HouseholdProperties;
 import com.smartwater.billing.resident.service.OccupancyService;
 import com.smartwater.billing.common.util.TokenGenerator;
 import org.springframework.context.annotation.Lazy;
@@ -39,6 +40,8 @@ public class AuthService {
     private final ResidentInvitationRepository invitationRepository;
     private final ApartmentRepository apartmentRepository;
     private final ApartmentOccupancyRepository occupancyRepository;
+    private final HouseholdSizeHistoryRepository historyRepository;
+    private final HouseholdProperties householdProperties;
     private final WaterMeterRepository waterMeterRepository;
     private final OccupancyService occupancyService;
     private final PasswordEncoder passwordEncoder;
@@ -53,6 +56,8 @@ public class AuthService {
             ResidentInvitationRepository invitationRepository,
             ApartmentRepository apartmentRepository,
             ApartmentOccupancyRepository occupancyRepository,
+            HouseholdSizeHistoryRepository historyRepository,
+            HouseholdProperties householdProperties,
             WaterMeterRepository waterMeterRepository,
             @Lazy OccupancyService occupancyService,
             PasswordEncoder passwordEncoder,
@@ -66,6 +71,8 @@ public class AuthService {
         this.invitationRepository = invitationRepository;
         this.apartmentRepository = apartmentRepository;
         this.occupancyRepository = occupancyRepository;
+        this.historyRepository = historyRepository;
+        this.householdProperties = householdProperties;
         this.waterMeterRepository = waterMeterRepository;
         this.occupancyService = occupancyService;
         this.passwordEncoder = passwordEncoder;
@@ -204,7 +211,10 @@ public class AuthService {
         // Check if pre-existing resident row exists (e.g. from invitation)
         Resident resident = residentRepository.findByEmailIgnoreCase(email).orElse(null);
         if (resident == null) {
-            Building defaultBldg = buildingRepository.findAll().stream().findFirst().orElse(null);
+            Building defaultBldg = buildingRepository.findAll().stream()
+                    .filter(b -> b.getOwner() != null && b.getOwner().getApprovalStatus() == BuildingOwner.ApprovalStatus.APPROVED)
+                    .findFirst()
+                    .orElse(null);
             resident = Resident.builder()
                     .user(user)
                     .building(defaultBldg)
@@ -382,16 +392,66 @@ public class AuthService {
                 }
             }
 
+            Integer hhSize = request.getHouseholdSize();
+            Integer chCount = request.getChildrenCount() != null ? request.getChildrenCount() : 0;
+            String hhSource = "RESIDENT_DECLARED";
+            boolean hhConfirmed = true;
+
+            if (hhSize == null || hhSize < 1) {
+                if (invitation != null && invitation.getHouseholdSize() != null && invitation.getHouseholdSize() > 0) {
+                    hhSize = invitation.getHouseholdSize();
+                    chCount = invitation.getChildrenCount() != null ? invitation.getChildrenCount() : 0;
+                    hhSource = "OWNER_ENTERED";
+                    hhConfirmed = true;
+                } else {
+                    hhSize = householdProperties.getDefaultSizeForUnitType(apt.getUnitType());
+                    chCount = 0;
+                    hhSource = "DEFAULT_ESTIMATE";
+                    hhConfirmed = false;
+                }
+            }
+
             Optional<ApartmentOccupancy> existingOcc = occupancyRepository.findFirstByApartmentApartmentIdAndStatus(apt.getApartmentId(), OccupancyStatus.ACTIVE);
+            ApartmentOccupancy occ;
             if (existingOcc.isEmpty()) {
-                ApartmentOccupancy occ = ApartmentOccupancy.builder()
+                occ = ApartmentOccupancy.builder()
                         .apartment(apt)
                         .resident(resident)
                         .startDate(now)
                         .status(OccupancyStatus.ACTIVE)
+                        .householdSize(hhSize)
+                        .childrenCount(chCount)
+                        .householdSizeSource(hhSource)
+                        .householdSizeConfirmed(hhConfirmed)
                         .build();
-                occupancyRepository.save(occ);
+                occ = occupancyRepository.save(occ);
+            } else {
+                occ = existingOcc.get();
+                occ.setHouseholdSize(hhSize);
+                occ.setChildrenCount(chCount);
+                occ.setHouseholdSizeSource(hhSource);
+                occ.setHouseholdSizeConfirmed(hhConfirmed);
+                occ = occupancyRepository.save(occ);
             }
+
+            // Record initial HouseholdSizeHistory row
+            boolean sanityWarning = hhSize > householdProperties.getLimits().getSanityWarningThreshold();
+            HouseholdSizeHistory history = HouseholdSizeHistory.builder()
+                    .occupancy(occ)
+                    .apartment(apt)
+                    .householdSize(hhSize)
+                    .childrenCount(chCount)
+                    .effectiveFrom(now.toLocalDate())
+                    .effectiveTo(null)
+                    .changedByUser(user)
+                    .changedByRole("RESIDENT")
+                    .reason("MOVE_IN")
+                    .note("Move-in via invitation accept")
+                    .sanityWarning(sanityWarning)
+                    .status("ACTIVE")
+                    .createdAt(now)
+                    .build();
+            historyRepository.save(history);
 
             // Link WaterMeter
             WaterMeter meter = waterMeterRepository.findByResidentResidentId(resident.getResidentId()).orElse(null);

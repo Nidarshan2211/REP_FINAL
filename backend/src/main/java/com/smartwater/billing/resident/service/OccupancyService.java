@@ -35,6 +35,9 @@ import java.util.Collections;
 import java.util.List;
 import java.util.Optional;
 import java.util.stream.Collectors;
+import com.smartwater.billing.common.ml.HouseholdProperties;
+import com.smartwater.billing.resident.entity.HouseholdSizeHistory;
+import com.smartwater.billing.resident.repository.HouseholdSizeHistoryRepository;
 import jakarta.persistence.EntityManager;
 import jakarta.persistence.PersistenceContext;
 
@@ -54,6 +57,8 @@ public class OccupancyService {
     private final BuildingOwnerRepository ownerRepository;
     private final OccupancyRequestRepository occupancyRequestRepository;
     private final BillRepository billRepository;
+    private final HouseholdSizeHistoryRepository historyRepository;
+    private final HouseholdProperties householdProperties;
 
     public OccupancyService(
             ApartmentOccupancyRepository occupancyRepository,
@@ -65,7 +70,9 @@ public class OccupancyService {
             NotificationRepository notificationRepository,
             BuildingOwnerRepository ownerRepository,
             OccupancyRequestRepository occupancyRequestRepository,
-            BillRepository billRepository
+            BillRepository billRepository,
+            HouseholdSizeHistoryRepository historyRepository,
+            HouseholdProperties householdProperties
     ) {
         this.occupancyRepository = occupancyRepository;
         this.apartmentRepository = apartmentRepository;
@@ -77,6 +84,8 @@ public class OccupancyService {
         this.ownerRepository = ownerRepository;
         this.occupancyRequestRepository = occupancyRequestRepository;
         this.billRepository = billRepository;
+        this.historyRepository = historyRepository;
+        this.householdProperties = householdProperties;
     }
 
     private User validateResidentUser(String email) {
@@ -466,6 +475,11 @@ public class OccupancyService {
         Apartment apt = apartmentRepository.findById(req.getApartmentId())
                 .orElseThrow(() -> new ResourceNotFoundException("Apartment unit not found with id: " + req.getApartmentId()));
 
+        Building building = apt.getBuilding();
+        if (building == null || building.getOwner() == null || building.getOwner().getApprovalStatus() != BuildingOwner.ApprovalStatus.APPROVED) {
+            throw new BadRequestException("Cannot request apartment occupancy: The property building owner has not been approved by the Super Admin.");
+        }
+
         // 2. Resolve or create resident profile with apartment building context
         Resident resident = getOrCreateResidentProfile(user, apt.getBuilding());
 
@@ -501,6 +515,8 @@ public class OccupancyService {
                 .status(RequestStatus.PENDING)
                 .requestDate(LocalDateTime.now())
                 .notes(req.getNotes() != null ? req.getNotes().trim() : null)
+                .householdSize(req.getHouseholdSize())
+                .childrenCount(req.getChildrenCount())
                 .build();
 
         request = occupancyRequestRepository.save(request);
@@ -631,13 +647,48 @@ public class OccupancyService {
             }
 
             // 5. Establish active occupancy
+            Integer hhSize = request.getHouseholdSize();
+            Integer chCount = request.getChildrenCount() != null ? request.getChildrenCount() : 0;
+            String hhSource = "RESIDENT_DECLARED";
+            boolean hhConfirmed = true;
+
+            if (hhSize == null || hhSize < 1) {
+                hhSize = householdProperties.getDefaultSizeForUnitType(apartment.getUnitType());
+                chCount = 0;
+                hhSource = "DEFAULT_ESTIMATE";
+                hhConfirmed = false;
+            }
+
             ApartmentOccupancy occupancy = ApartmentOccupancy.builder()
                     .apartment(apartment)
                     .resident(resident)
                     .startDate(now)
                     .status(OccupancyStatus.ACTIVE)
+                    .householdSize(hhSize)
+                    .childrenCount(chCount)
+                    .householdSizeSource(hhSource)
+                    .householdSizeConfirmed(hhConfirmed)
                     .build();
-            occupancyRepository.save(occupancy);
+            occupancy = occupancyRepository.save(occupancy);
+
+            // Record initial HouseholdSizeHistory row
+            boolean sanityWarning = hhSize > householdProperties.getLimits().getSanityWarningThreshold();
+            HouseholdSizeHistory history = HouseholdSizeHistory.builder()
+                    .occupancy(occupancy)
+                    .apartment(apartment)
+                    .householdSize(hhSize)
+                    .childrenCount(chCount)
+                    .effectiveFrom(now.toLocalDate())
+                    .effectiveTo(null)
+                    .changedByUser(ownerUser)
+                    .changedByRole("BUILDING_OWNER")
+                    .reason("MOVE_IN")
+                    .note("Move-in via approved occupancy request")
+                    .sanityWarning(sanityWarning)
+                    .status("ACTIVE")
+                    .createdAt(now)
+                    .build();
+            historyRepository.save(history);
 
             // 6. Connect resident to building and room
             resident.setBuilding(building);

@@ -1,0 +1,7 @@
+usage_id,apartment_id,submitted_by_user_id,submitter_role,feedback,note,created_at
+102,2,2,BUILDING_OWNER,REAL_LEAK_CONFIRMED,"Plumber inspected and confirmed catastrophic pipe joint burst behind washing machine.",2026-10-15T18:30:00
+103,3,4,RESIDENT,CONFIRMED_LEAK,"Found running toilet flapper valve in master bathroom, replaced valve rubber seal.",2026-10-15T18:45:00
+104,4,5,RESIDENT,FALSE_ALARM,"Household was on family vacation for 18 days. Low consumption was genuine.",2026-10-15T19:00:00
+27,5,7,BUILDING_OWNER,OTHER,"",2026-10-15T23:17:18.167632
+28,6,9,RESIDENT,FALSE_ALARM,"",2026-10-15T23:19:00.7081715
+28,6,9,RESIDENT,FALSE_ALARM,"Genuine water use during deep cleaning.",2026-10-15T23:37:28.9154194

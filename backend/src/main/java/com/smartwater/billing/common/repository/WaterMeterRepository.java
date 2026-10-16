@@ -16,6 +16,8 @@ public interface WaterMeterRepository extends JpaRepository<WaterMeter, Long> {
     Optional<WaterMeter> findByMeterNumber(String meterNumber);
     Optional<WaterMeter> findFirstByResidentResidentId(Long residentId);
     Optional<WaterMeter> findByResidentResidentId(Long residentId);
+    Optional<WaterMeter> findFirstByApartmentApartmentId(Long apartmentId);
+    Optional<WaterMeter> findByApartmentApartmentId(Long apartmentId);
     List<WaterMeter> findByBuildingBuildingId(Long buildingId);
     List<WaterMeter> findByBuildingOwnerOwnerId(Long ownerId);
 }

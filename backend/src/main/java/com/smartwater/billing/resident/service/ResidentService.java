@@ -201,6 +201,8 @@ public class ResidentService {
                 .apartmentNumber(room)
                 .tokenHash(tokenHash)
                 .expiresAt(expiresAt)
+                .householdSize(request.getHouseholdSize())
+                .childrenCount(request.getChildrenCount())
                 .status(ResidentInvitation.InvitationStatus.PENDING)
                 .build();
         invitationRepository.save(invitation);
@@ -272,8 +274,10 @@ public class ResidentService {
         String buildingName = resident.getBuilding() != null ? resident.getBuilding().getBuildingName() : "N/A";
         String apartmentNumber = resident.getApartmentNumber();
         LocalDateTime expiresAt = resident.getExpiresAt();
+        Integer householdSize = (invitation != null) ? invitation.getHouseholdSize() : null;
+        Integer childrenCount = (invitation != null) ? invitation.getChildrenCount() : null;
 
-        return new ValidateInvitationResponse("PENDING", name, email, buildingName, apartmentNumber, expiresAt != null ? expiresAt.toString() : null, "Valid invitation token.");
+        return new ValidateInvitationResponse("PENDING", name, email, buildingName, apartmentNumber, householdSize, childrenCount, expiresAt != null ? expiresAt.toString() : null, "Valid invitation token.");
     }
 
     public ValidateInvitationResponse validateInvitation(String token) {

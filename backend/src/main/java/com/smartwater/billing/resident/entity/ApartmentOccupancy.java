@@ -42,12 +42,28 @@ public class ApartmentOccupancy {
     @Column(name = "move_out_reason", length = 255)
     private String moveOutReason;
 
+    // Household Size Capture
+    @Column(name = "household_size")
+    private Integer householdSize;
+
+    @Column(name = "children_count")
+    private Integer childrenCount;
+
+    @Column(name = "household_size_source", length = 30)
+    private String householdSizeSource;
+
+    @Column(name = "household_size_confirmed", nullable = false)
+    private Boolean householdSizeConfirmed = false;
+
     @Column(name = "created_at", updatable = false)
     private LocalDateTime createdAt;
 
     public ApartmentOccupancy() {}
 
-    public ApartmentOccupancy(Long occupancyId, Apartment apartment, Resident resident, LocalDateTime startDate, LocalDateTime endDate, OccupancyStatus status, String moveOutReason, LocalDateTime createdAt) {
+    public ApartmentOccupancy(Long occupancyId, Apartment apartment, Resident resident, LocalDateTime startDate,
+                              LocalDateTime endDate, OccupancyStatus status, String moveOutReason,
+                              Integer householdSize, Integer childrenCount, String householdSizeSource,
+                              Boolean householdSizeConfirmed, LocalDateTime createdAt) {
         this.occupancyId = occupancyId;
         this.apartment = apartment;
         this.resident = resident;
@@ -55,7 +71,17 @@ public class ApartmentOccupancy {
         this.endDate = endDate;
         this.status = status;
         this.moveOutReason = moveOutReason;
+        this.householdSize = householdSize;
+        this.childrenCount = childrenCount;
+        this.householdSizeSource = householdSizeSource;
+        this.householdSizeConfirmed = householdSizeConfirmed != null ? householdSizeConfirmed : false;
         this.createdAt = createdAt;
+    }
+
+    // Legacy constructor compatibility
+    public ApartmentOccupancy(Long occupancyId, Apartment apartment, Resident resident, LocalDateTime startDate,
+                              LocalDateTime endDate, OccupancyStatus status, String moveOutReason, LocalDateTime createdAt) {
+        this(occupancyId, apartment, resident, startDate, endDate, status, moveOutReason, null, null, null, false, createdAt);
     }
 
     @PrePersist
@@ -68,6 +94,9 @@ public class ApartmentOccupancy {
         }
         if (status == null) {
             status = OccupancyStatus.ACTIVE;
+        }
+        if (householdSizeConfirmed == null) {
+            householdSizeConfirmed = false;
         }
     }
 
@@ -92,6 +121,18 @@ public class ApartmentOccupancy {
     public String getMoveOutReason() { return moveOutReason; }
     public void setMoveOutReason(String moveOutReason) { this.moveOutReason = moveOutReason; }
 
+    public Integer getHouseholdSize() { return householdSize; }
+    public void setHouseholdSize(Integer householdSize) { this.householdSize = householdSize; }
+
+    public Integer getChildrenCount() { return childrenCount; }
+    public void setChildrenCount(Integer childrenCount) { this.childrenCount = childrenCount; }
+
+    public String getHouseholdSizeSource() { return householdSizeSource; }
+    public void setHouseholdSizeSource(String householdSizeSource) { this.householdSizeSource = householdSizeSource; }
+
+    public Boolean getHouseholdSizeConfirmed() { return householdSizeConfirmed; }
+    public void setHouseholdSizeConfirmed(Boolean householdSizeConfirmed) { this.householdSizeConfirmed = householdSizeConfirmed; }
+
     public LocalDateTime getCreatedAt() { return createdAt; }
     public void setCreatedAt(LocalDateTime createdAt) { this.createdAt = createdAt; }
 
@@ -105,6 +146,10 @@ public class ApartmentOccupancy {
         private LocalDateTime endDate;
         private OccupancyStatus status = OccupancyStatus.ACTIVE;
         private String moveOutReason;
+        private Integer householdSize;
+        private Integer childrenCount;
+        private String householdSizeSource;
+        private Boolean householdSizeConfirmed = false;
         private LocalDateTime createdAt;
 
         public Builder occupancyId(Long occupancyId) { this.occupancyId = occupancyId; return this; }
@@ -114,10 +159,15 @@ public class ApartmentOccupancy {
         public Builder endDate(LocalDateTime endDate) { this.endDate = endDate; return this; }
         public Builder status(OccupancyStatus status) { this.status = status; return this; }
         public Builder moveOutReason(String moveOutReason) { this.moveOutReason = moveOutReason; return this; }
+        public Builder householdSize(Integer householdSize) { this.householdSize = householdSize; return this; }
+        public Builder childrenCount(Integer childrenCount) { this.childrenCount = childrenCount; return this; }
+        public Builder householdSizeSource(String householdSizeSource) { this.householdSizeSource = householdSizeSource; return this; }
+        public Builder householdSizeConfirmed(Boolean householdSizeConfirmed) { this.householdSizeConfirmed = householdSizeConfirmed; return this; }
         public Builder createdAt(LocalDateTime createdAt) { this.createdAt = createdAt; return this; }
 
         public ApartmentOccupancy build() {
-            return new ApartmentOccupancy(occupancyId, apartment, resident, startDate, endDate, status, moveOutReason, createdAt);
+            return new ApartmentOccupancy(occupancyId, apartment, resident, startDate, endDate, status,
+                    moveOutReason, householdSize, childrenCount, householdSizeSource, householdSizeConfirmed, createdAt);
         }
     }
 

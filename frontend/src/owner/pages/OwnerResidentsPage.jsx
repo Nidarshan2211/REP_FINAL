@@ -543,6 +543,16 @@ export default function OwnerResidentsPage() {
                         <span className="text-muted d-block fs-8">Apartment Unit</span>
                         <strong className="text-dark">Unit {selectedRequest.roomNumber} (Floor {selectedRequest.floorNumber})</strong>
                       </div>
+                      {selectedRequest.householdSize != null && (
+                        <div className="col-12 mt-2 pt-2 border-top">
+                          <span className="text-muted d-block fs-8">Declared Household Size</span>
+                          <strong className="text-primary">
+                            <i className="bi bi-people-fill me-1"></i>
+                            {selectedRequest.householdSize} People
+                            {selectedRequest.childrenCount ? ` (${selectedRequest.childrenCount} children)` : ''}
+                          </strong>
+                        </div>
+                      )}
                     </div>
                   </div>
 
