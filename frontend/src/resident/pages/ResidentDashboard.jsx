@@ -401,7 +401,7 @@ export default function ResidentDashboard() {
                     leakData?.hasFeedback
                       ? `${formatFeedbackLabel(leakData.latestFeedback)} • Acknowledged`
                       : leakData?.anomalyScore != null
-                      ? `Risk: ${Math.round(leakData.anomalyScore)}% • Diagnostics`
+                      ? `Risk: ${(leakData.anomalyScore > 0 && leakData.anomalyScore <= 1.0) ? Math.round(leakData.anomalyScore * 100) : Math.round(leakData.anomalyScore)}% • Diagnostics`
                       : 'Diagnostics Active'
                   }
                 />

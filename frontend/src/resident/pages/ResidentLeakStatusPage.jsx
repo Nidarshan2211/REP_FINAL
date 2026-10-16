@@ -68,7 +68,10 @@ export default function ResidentLeakStatusPage() {
   const units = data?.unitsConsumed != null ? Number(data.unitsConsumed).toFixed(2) : '0.00';
   const expMin = data?.expectedMin != null ? Number(data.expectedMin).toFixed(2) : '0.00';
   const expMax = data?.expectedMax != null ? Number(data.expectedMax).toFixed(2) : '0.00';
-  const riskScore = data?.anomalyScore != null ? Math.round(data.anomalyScore) : 0;
+  const rawRisk = data?.anomalyScore;
+  const riskScore = rawRisk != null
+    ? (rawRisk > 0 && rawRisk <= 1.0 ? Math.round(rawRisk * 100) : Math.round(rawRisk))
+    : 0;
   const confidence = data?.anomalyConfidence ? parseFloat(data.anomalyConfidence) : null;
   const extraCost = data?.estimatedExtraCost != null ? Number(data.estimatedExtraCost).toFixed(2) : null;
   const aptLabel = data?.apartmentNumber ? `Flat ${data.apartmentNumber}` : 'Your Flat';
