@@ -12,12 +12,20 @@ public class CsvHelper {
 
     /**
      * Parses an input stream of CSV content into a list of row string arrays.
+     * Safely handles UTF-8 BOM characters.
      */
     public static List<List<String>> parseCsv(InputStream inputStream) throws IOException {
         List<List<String>> rows = new ArrayList<>();
         try (BufferedReader reader = new BufferedReader(new InputStreamReader(inputStream, StandardCharsets.UTF_8))) {
             String line;
+            boolean isFirstLine = true;
             while ((line = reader.readLine()) != null) {
+                if (isFirstLine) {
+                    if (line.startsWith("\uFEFF")) {
+                        line = line.substring(1);
+                    }
+                    isFirstLine = false;
+                }
                 // Skip empty lines or pure whitespace
                 if (line.trim().isEmpty()) {
                     continue;
@@ -49,13 +57,21 @@ public class CsvHelper {
                     inQuotes = !inQuotes;
                 }
             } else if (c == ',' && !inQuotes) {
-                tokens.add(sb.toString().trim());
+                String token = sb.toString().trim();
+                if (token.startsWith("\uFEFF")) {
+                    token = token.substring(1).trim();
+                }
+                tokens.add(token);
                 sb.setLength(0);
             } else {
                 sb.append(c);
             }
         }
-        tokens.add(sb.toString().trim());
+        String token = sb.toString().trim();
+        if (token.startsWith("\uFEFF")) {
+            token = token.substring(1).trim();
+        }
+        tokens.add(token);
         return tokens;
     }
 

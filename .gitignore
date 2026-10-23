@@ -82,3 +82,7 @@ __pycache__/
 .venv/
 venv/
 .pytest_cache/
+
+# Temporary browser automation profile
+edge_tmp_profile/
+

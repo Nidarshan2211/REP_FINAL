@@ -22,6 +22,7 @@ import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
+import java.util.stream.Collectors;
 
 @Service
 public class BillingCycleService {
@@ -112,10 +113,13 @@ public class BillingCycleService {
         // 1. Get 3-Tier Tariff Plan for this Cycle
         TariffPlan tariff = tariffCalculationService.getOrGenerateTariffForCycle(cycle);
 
-        // 2. Find residents belonging STRICTLY to this building
-        List<Resident> residents = residentRepository.findByBuildingBuildingId(buildingId);
+        // 2. Find residents belonging STRICTLY to this building (ACTIVE accounts only)
+        List<Resident> residents = residentRepository.findByBuildingBuildingId(buildingId).stream()
+                .filter(r -> r.getApartmentNumber() == null || (!r.getApartmentNumber().equalsIgnoreCase("Removed") && !r.getApartmentNumber().equalsIgnoreCase("Vacated")))
+                .filter(r -> r.getAccountStatus() == Resident.AccountStatus.ACTIVE || r.getInvitationStatus() == Resident.InvitationStatus.PENDING || r.getInvitationStatus() == Resident.InvitationStatus.ACCEPTED)
+                .collect(Collectors.toList());
         if (residents.isEmpty()) {
-            throw new BadRequestException("Finalize failed: No active residents found in building '" + cycle.getBuilding().getBuildingName() + "'.");
+            throw new BadRequestException("Finalize failed: No residents found in building '" + cycle.getBuilding().getBuildingName() + "'.");
         }
 
         // 3. Validation: Verify ALL active residents have a recorded WaterUsage for this exact cycle

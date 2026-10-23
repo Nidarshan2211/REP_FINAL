@@ -136,7 +136,7 @@ public class BuildingOwnerService {
     }
 
     @Transactional
-    public void deleteBuilding(String email, Long buildingId) {
+public void deleteBuilding(String email, Long buildingId) {
         User user = userRepository.findByEmail(email)
                 .orElseThrow(() -> new ResourceNotFoundException("User not found with email: " + email));
         Building building = buildingRepository.findById(buildingId)
@@ -150,80 +150,110 @@ public class BuildingOwnerService {
             }
         }
 
-        // Clean up all related tables in foreign key order:
-        // 1. Occupancy requests
-        entityManager.createNativeQuery(
-                "DELETE FROM occupancy_requests WHERE apartment_id IN (SELECT a.apartment_id FROM (SELECT apartment_id FROM apartments WHERE building_id = :bldgId) a)"
-        ).setParameter("bldgId", buildingId).executeUpdate();
+        try {
+            entityManager.createNativeQuery("SET FOREIGN_KEY_CHECKS = 0").executeUpdate();
 
-        // 2. Resident invitations
-        entityManager.createNativeQuery(
-                "DELETE FROM resident_invitations WHERE building_id = :bldgId OR apartment_id IN (SELECT a.apartment_id FROM (SELECT apartment_id FROM apartments WHERE building_id = :bldgId) a)"
-        ).setParameter("bldgId", buildingId).executeUpdate();
+            // 1. Away periods & household size history
+            entityManager.createNativeQuery(
+                    "DELETE FROM away_periods WHERE apartment_id IN (SELECT a.apartment_id FROM (SELECT apartment_id FROM apartments WHERE building_id = :bldgId) a)"
+            ).setParameter("bldgId", buildingId).executeUpdate();
 
-        // 3. Apartment occupancies
-        entityManager.createNativeQuery(
-                "DELETE FROM apartment_occupancies WHERE apartment_id IN (SELECT a.apartment_id FROM (SELECT apartment_id FROM apartments WHERE building_id = :bldgId) a)"
-        ).setParameter("bldgId", buildingId).executeUpdate();
+            entityManager.createNativeQuery(
+                    "DELETE FROM household_size_history WHERE apartment_id IN (SELECT a.apartment_id FROM (SELECT apartment_id FROM apartments WHERE building_id = :bldgId) a)"
+            ).setParameter("bldgId", buildingId).executeUpdate();
 
-        // 4. Water usage
-        entityManager.createNativeQuery(
-                "DELETE FROM water_usage WHERE meter_id IN (SELECT m.meter_id FROM (SELECT meter_id FROM water_meters WHERE building_id = :bldgId) m)"
-        ).setParameter("bldgId", buildingId).executeUpdate();
+            // 2. Leak feedback and incidents
+            entityManager.createNativeQuery(
+                    "DELETE FROM leak_feedback WHERE apartment_id IN (SELECT a.apartment_id FROM (SELECT apartment_id FROM apartments WHERE building_id = :bldgId) a)"
+            ).setParameter("bldgId", buildingId).executeUpdate();
 
-        // 5. Water meters
-        entityManager.createNativeQuery(
-                "DELETE FROM water_meters WHERE building_id = :bldgId"
-        ).setParameter("bldgId", buildingId).executeUpdate();
+            entityManager.createNativeQuery(
+                    "DELETE FROM leak_incidents WHERE apartment_id IN (SELECT a.apartment_id FROM (SELECT apartment_id FROM apartments WHERE building_id = :bldgId) a)"
+            ).setParameter("bldgId", buildingId).executeUpdate();
 
-        // 5. Payments (must be deleted before bills)
-        entityManager.createNativeQuery(
-                "DELETE FROM payments WHERE bill_id IN (" +
-                "  SELECT b.bill_id FROM (SELECT bill_id FROM bills WHERE billing_cycle_id IN (SELECT id FROM billing_cycles WHERE building_id = :bldgId) " +
-                "  OR resident_id IN (SELECT resident_id FROM residents WHERE building_id = :bldgId)) b)"
-        ).setParameter("bldgId", buildingId).executeUpdate();
+            // 3. Occupancy requests & resident invitations
+            entityManager.createNativeQuery(
+                    "DELETE FROM occupancy_requests WHERE apartment_id IN (SELECT a.apartment_id FROM (SELECT apartment_id FROM apartments WHERE building_id = :bldgId) a)"
+            ).setParameter("bldgId", buildingId).executeUpdate();
 
-        // 6. Invoices (must be deleted before billing_cycles and residents)
-        entityManager.createNativeQuery(
-                "DELETE FROM invoices WHERE billing_cycle_id IN (SELECT b.id FROM (SELECT id FROM billing_cycles WHERE building_id = :bldgId) b) " +
-                "OR resident_id IN (SELECT r.resident_id FROM (SELECT resident_id FROM residents WHERE building_id = :bldgId) r)"
-        ).setParameter("bldgId", buildingId).executeUpdate();
+            entityManager.createNativeQuery(
+                    "DELETE FROM resident_invitations WHERE building_id = :bldgId OR apartment_id IN (SELECT a.apartment_id FROM (SELECT apartment_id FROM apartments WHERE building_id = :bldgId) a)"
+            ).setParameter("bldgId", buildingId).executeUpdate();
 
-        // 7. Bills (must be deleted before billing_cycles and residents)
-        entityManager.createNativeQuery(
-                "DELETE FROM bills WHERE billing_cycle_id IN (SELECT b.id FROM (SELECT id FROM billing_cycles WHERE building_id = :bldgId) b) " +
-                "OR resident_id IN (SELECT r.resident_id FROM (SELECT resident_id FROM residents WHERE building_id = :bldgId) r)"
-        ).setParameter("bldgId", buildingId).executeUpdate();
+            // 4. Payments (must be deleted before bills)
+            entityManager.createNativeQuery(
+                    "DELETE FROM payments WHERE bill_id IN (" +
+                    "  SELECT b.bill_id FROM (SELECT bill_id FROM bills WHERE billing_cycle_id IN (SELECT id FROM billing_cycles WHERE building_id = :bldgId) " +
+                    "  OR resident_id IN (SELECT resident_id FROM residents WHERE building_id = :bldgId)) b)"
+            ).setParameter("bldgId", buildingId).executeUpdate();
 
-        // 8. Notifications
-        entityManager.createNativeQuery(
-                "DELETE FROM notifications WHERE resident_id IN (SELECT r.resident_id FROM (SELECT resident_id FROM residents WHERE building_id = :bldgId) r)"
-        ).setParameter("bldgId", buildingId).executeUpdate();
+            // 5. Invoices
+            entityManager.createNativeQuery(
+                    "DELETE FROM invoices WHERE billing_cycle_id IN (SELECT b.id FROM (SELECT id FROM billing_cycles WHERE building_id = :bldgId) b) " +
+                    "OR resident_id IN (SELECT r.resident_id FROM (SELECT resident_id FROM residents WHERE building_id = :bldgId) r)"
+            ).setParameter("bldgId", buildingId).executeUpdate();
 
-        // 9. Water meters
-        entityManager.createNativeQuery(
-                "DELETE FROM water_meters WHERE building_id = :bldgId"
-        ).setParameter("bldgId", buildingId).executeUpdate();
+            // 6. Bills (must be deleted before water_usage)
+            entityManager.createNativeQuery(
+                    "DELETE FROM bills WHERE billing_cycle_id IN (SELECT b.id FROM (SELECT id FROM billing_cycles WHERE building_id = :bldgId) b) " +
+                    "OR resident_id IN (SELECT r.resident_id FROM (SELECT resident_id FROM residents WHERE building_id = :bldgId) r)"
+            ).setParameter("bldgId", buildingId).executeUpdate();
 
-        // 10. Tariff plans, water purchases, billing cycles
-        entityManager.createNativeQuery("DELETE FROM tariff_plans WHERE building_id = :bldgId").setParameter("bldgId", buildingId).executeUpdate();
-        entityManager.createNativeQuery("DELETE FROM water_purchases WHERE building_id = :bldgId").setParameter("bldgId", buildingId).executeUpdate();
-        entityManager.createNativeQuery("DELETE FROM billing_cycles WHERE building_id = :bldgId").setParameter("bldgId", buildingId).executeUpdate();
+            // 7. Water usage (must be deleted after bills, before water_meters)
+            entityManager.createNativeQuery(
+                    "DELETE FROM water_usage WHERE meter_id IN (SELECT m.meter_id FROM (SELECT meter_id FROM water_meters WHERE building_id = :bldgId) m)"
+            ).setParameter("bldgId", buildingId).executeUpdate();
 
-        // 11. Residents
-        entityManager.createNativeQuery(
-                "DELETE FROM residents WHERE building_id = :bldgId"
-        ).setParameter("bldgId", buildingId).executeUpdate();
+            // 8. Notifications
+            entityManager.createNativeQuery(
+                    "DELETE FROM notifications WHERE resident_id IN (SELECT r.resident_id FROM (SELECT resident_id FROM residents WHERE building_id = :bldgId) r)"
+            ).setParameter("bldgId", buildingId).executeUpdate();
 
-        // 12. Apartments
-        entityManager.createNativeQuery(
-                "DELETE FROM apartments WHERE building_id = :bldgId"
-        ).setParameter("bldgId", buildingId).executeUpdate();
+            // 9. Water meters
+            entityManager.createNativeQuery(
+                    "DELETE FROM water_meters WHERE building_id = :bldgId"
+            ).setParameter("bldgId", buildingId).executeUpdate();
 
-        // 13. Building
-        entityManager.createNativeQuery(
-                "DELETE FROM buildings WHERE building_id = :bldgId"
-        ).setParameter("bldgId", buildingId).executeUpdate();
+            // 10. Apartment occupancies
+            entityManager.createNativeQuery(
+                    "DELETE FROM apartment_occupancies WHERE apartment_id IN (SELECT a.apartment_id FROM (SELECT apartment_id FROM apartments WHERE building_id = :bldgId) a)"
+            ).setParameter("bldgId", buildingId).executeUpdate();
+
+            // 11. Tariff plans, water purchases, billing cycles
+            entityManager.createNativeQuery("DELETE FROM tariff_plans WHERE building_id = :bldgId").setParameter("bldgId", buildingId).executeUpdate();
+            entityManager.createNativeQuery("DELETE FROM water_purchases WHERE building_id = :bldgId").setParameter("bldgId", buildingId).executeUpdate();
+            entityManager.createNativeQuery("DELETE FROM billing_cycles WHERE building_id = :bldgId").setParameter("bldgId", buildingId).executeUpdate();
+
+            // 12. Resident users and residents
+            @SuppressWarnings("unchecked")
+            List<Object> userIds = entityManager.createNativeQuery(
+                    "SELECT user_id FROM residents WHERE building_id = :bldgId AND user_id IS NOT NULL"
+            ).setParameter("bldgId", buildingId).getResultList();
+
+            entityManager.createNativeQuery(
+                    "DELETE FROM residents WHERE building_id = :bldgId"
+            ).setParameter("bldgId", buildingId).executeUpdate();
+
+            for (Object uid : userIds) {
+                if (uid != null) {
+                    entityManager.createNativeQuery(
+                            "DELETE FROM users WHERE user_id = :uid AND role != 'SUPER_ADMIN'"
+                    ).setParameter("uid", ((Number) uid).longValue()).executeUpdate();
+                }
+            }
+
+            // 13. Apartments
+            entityManager.createNativeQuery(
+                    "DELETE FROM apartments WHERE building_id = :bldgId"
+            ).setParameter("bldgId", buildingId).executeUpdate();
+
+            // 14. Building
+            entityManager.createNativeQuery(
+                    "DELETE FROM buildings WHERE building_id = :bldgId"
+            ).setParameter("bldgId", buildingId).executeUpdate();
+        } finally {
+            entityManager.createNativeQuery("SET FOREIGN_KEY_CHECKS = 1").executeUpdate();
+        }
     }
 
     private BuildingResponse convertToBuildingResponse(Building building) {
@@ -404,7 +434,7 @@ public class BuildingOwnerService {
         return list;
     }
 
-    @Transactional
+@Transactional
     public void leaveApplication(String email) {
         BuildingOwner owner = getOwnerByUserEmail(email);
         Long ownerId = owner.getOwnerId();
@@ -424,29 +454,34 @@ public class BuildingOwnerService {
              .executeUpdate();
         } catch (Exception ignored) {}
 
-        // 2. Cascade delete all buildings owned by this owner
-        List<Building> buildings = buildingRepository.findByOwner(owner);
-        for (Building b : buildings) {
-            deleteBuilding(email, b.getBuildingId());
-        }
+        try {
+            entityManager.createNativeQuery("SET FOREIGN_KEY_CHECKS = 0").executeUpdate();
 
-        // 3. Delete resident invitations issued by this owner
-        entityManager.createNativeQuery("DELETE FROM resident_invitations WHERE invited_by_id = :ownerId")
-                .setParameter("ownerId", ownerId)
-                .executeUpdate();
+            // 2. Cascade delete all buildings owned by this owner
+            List<Building> buildings = buildingRepository.findByOwner(owner);
+            for (Building b : buildings) {
+                deleteBuilding(email, b.getBuildingId());
+            }
 
-        // 4. Delete building owner profile
-        Long userId = owner.getUser() != null ? owner.getUser().getUserId() : null;
-        entityManager.createNativeQuery("DELETE FROM building_owners WHERE owner_id = :ownerId")
-                .setParameter("ownerId", ownerId)
-                .executeUpdate();
-
-        // 5. Delete user account
-        if (userId != null) {
-            entityManager.createNativeQuery("DELETE FROM users WHERE user_id = :userId AND role != 'SUPER_ADMIN'")
-                    .setParameter("userId", userId)
+            // 3. Delete resident invitations issued by this owner
+            entityManager.createNativeQuery("DELETE FROM resident_invitations WHERE invited_by_id = :ownerId")
+                    .setParameter("ownerId", ownerId)
                     .executeUpdate();
+
+            // 4. Delete building owner profile
+            Long userId = owner.getUser() != null ? owner.getUser().getUserId() : null;
+            entityManager.createNativeQuery("DELETE FROM building_owners WHERE owner_id = :ownerId")
+                    .setParameter("ownerId", ownerId)
+                    .executeUpdate();
+
+            // 5. Delete user account
+            if (userId != null) {
+                entityManager.createNativeQuery("DELETE FROM users WHERE user_id = :userId AND role != 'SUPER_ADMIN'")
+                        .setParameter("userId", userId)
+                        .executeUpdate();
+            }
+        } finally {
+            entityManager.createNativeQuery("SET FOREIGN_KEY_CHECKS = 1").executeUpdate();
         }
     }
 }
-

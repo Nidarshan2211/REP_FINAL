@@ -272,7 +272,9 @@ public class BulkBillingService {
         Map<String, Integer> colMap = buildHeaderMap(headerRow);
         validateRequiredHeaders(colMap);
 
-        List<Resident> buildingResidents = residentRepository.findByBuildingBuildingId(buildingId);
+        List<Resident> buildingResidents = residentRepository.findByBuildingBuildingId(buildingId).stream()
+                .filter(r -> r.getAccountStatus() == Resident.AccountStatus.ACTIVE)
+                .collect(Collectors.toList());
         Map<Long, Resident> residentMap = new HashMap<>();
         for (Resident r : buildingResidents) {
             residentMap.put(r.getResidentId(), r);
